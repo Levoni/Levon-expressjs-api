@@ -363,6 +363,61 @@ app.get(HREF + '/site', async (req,res) => {
   return res.status(200).json(siteResults.rows)
 })
 
+app.get(HREF + '/request', async (req,res) => {
+  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
+    res.status(401).json({"error":"token was not provided"})
+    return
+  }
+
+  let sql = 'SELECT * from requests'
+  let selectResults = await dbHelper.select(sql, [], db)
+  return res.status(200).json(selectResults.rows)
+})
+
+app.get(HREF + '/request/:userName', async (req,res) => {
+  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
+    res.status(401).json({"error":"token was not provided"})
+    return
+  }
+  if(!req.params['userName']) {
+    res.status(400).json({'error':'messing required info'})
+    return
+  }
+  var userName = req.params['userName']
+
+  let sql = `SELECT * from requests where user_name = ?`
+  let selectResults = await dbHelper.select(sql, [userName], db)
+  return res.status(200).json(selectResults.rows)
+})
+
+app.get(HREF + '/request_messages', async (req,res) => {
+  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
+    res.status(401).json({"error":"token was not provided"})
+    return
+  }
+
+  let sql = 'SELECT * from request_message'
+  let selectResults = await dbHelper.select(sql, [], db)
+  return res.status(200).json(selectResults.rows)
+})
+
+app.get(HREF + '/request_messages/:id', async (req,res) => {
+  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
+    res.status(401).json({"error":"token was not provided"})
+    return
+  }
+  if(!req.params['id']) {
+    res.status(400).json({'error':'messing required info'})
+    return
+  }
+
+  var id = req.params['id']
+
+  let sql = `SELECT * from request_message where request_id = ?`
+  let selectResults = await dbHelper.select(sql, [id], db)
+  return res.status(200).json(selectResults.rows)
+})
+
 app.get(HREF + '/userSiteLink', async (req,res) => {
   if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
     res.status(401).json({"error":"token was not provided"})
@@ -533,6 +588,27 @@ app.post(HREF + '/site/add', async (req,res) => {
       return
     }
   }
+})
+
+app.post(HREF + '/request/add', async (req,res) => {
+  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
+    res.status(401).json({"error":"token was not provided"})
+    return
+  }
+  let {type, message} = req.body
+  if(!type || !message) {
+    res.status(400).json({"error":"Required requests info missing"})
+    return
+  }
+  
+  let sql = 'INSERT INTO requests (type, message) values(?,?)'
+  let results = await dbHelper.insert(sql,[type,message],db);
+  if(results.err) {
+    res.status(500).json({'error':'Error Creating request'})
+    return
+  }
+  res.status(200).json({'success':'request Created'})
+  return
 })
 
 app.post(HREF + '/userSiteLink/add', async (req,res) => {
