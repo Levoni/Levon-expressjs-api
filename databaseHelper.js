@@ -23,9 +23,33 @@ module.exports = {
         })
     },
 
+    delete: (sql, params, db) => {
+        return new Promise((resolve, reject) => {
+            db.run(sql, params,(err, rows)=> {
+                if(err) {
+                    console.log('sql error:')
+                    console.log(err)
+                }
+                return resolve({err:err,rows:rows})
+            })
+        })
+    },
+
     insert: (sql, params, db) => {
         return new Promise((resolve, reject) => {
             db.run(sql, params,(err, rows)=> {
+                if(err) {
+                    console.log('sql error:')
+                    console.log(err)
+                }
+                return resolve({err:err,rows:rows})
+            })
+        })
+    },
+
+    insertAndGet: (sql, params, db) => {
+        return new Promise((resolve, reject) => {
+            db.get(sql, params,(err, rows)=> {
                 if(err) {
                     console.log('sql error:')
                     console.log(err)

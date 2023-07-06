@@ -369,7 +369,13 @@ app.get(HREF + '/request', async (req,res) => {
     return
   }
 
-  let sql = 'SELECT * from requests'
+  let params = req.query
+  let getclosedsql = ''
+  if(params && params.closed) {
+    getclosedsql = ` where closed = ${params.closed}`
+  }
+
+  let sql = 'SELECT * from requests' + getclosedsql
   let selectResults = await dbHelper.select(sql, [], db)
   return res.status(200).json(selectResults.rows)
 })
@@ -385,7 +391,13 @@ app.get(HREF + '/request/:userName', async (req,res) => {
   }
   var userName = req.params['userName']
 
-  let sql = `SELECT * from requests where user_name = ?`
+  let params = req.query
+  let getclosedsql = ''
+  if(params && params.closed) {
+    getclosedsql = ` and closed = ${params.closed}`
+  }
+
+  let sql = `SELECT * from requests where user_name = ? ${getclosedsql}`
   let selectResults = await dbHelper.select(sql, [userName], db)
   return res.status(200).json(selectResults.rows)
 })
@@ -416,6 +428,92 @@ app.get(HREF + '/request_messages/:id', async (req,res) => {
   let sql = `SELECT * from request_message where request_id = ?`
   let selectResults = await dbHelper.select(sql, [id], db)
   return res.status(200).json(selectResults.rows)
+})
+
+app.post(HREF + '/request_message/updateStatus', async (req,res) => {
+  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
+    res.status(401).json({"error":"token was not provided"})
+    return
+  }
+
+  let {closed, id} = req.body
+  if(closed == null, id == null) {
+    res.status(400).json({"error":"Required update info missing"})
+    return
+  }
+
+  let sql = 'UPDATE requests set closed = ? where id=?'
+  let results = await dbHelper.update(sql,[closed,id],db);
+  if(results.err) {
+    res.status(500).json({'error':'Error updating request status'})
+    return
+  }
+  res.status(200).json({'success':'Request status updated'})
+  return
+})
+
+app.get(HREF + '/list/:userName', async (req,res) => {
+  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
+    res.status(401).json({"error":"token was not provided"})
+    return
+  }
+  if(!req.params['userName']) {
+    res.status(400).json({'error':'messing required info'})
+    return
+  }
+  var userName = req.params['userName']
+
+  let sql = `SELECT l.id, l.name, l.type, l.is_template, ull.user_name, ull.list_id, ull.is_owner from list l join user_list_link ull on l.id == ull.list_id where ull.user_name = ?`
+  let selectResults = await dbHelper.select(sql, [userName], db)
+  return res.status(200).json(selectResults.rows)
+})
+
+app.get(HREF + '/list/quickview/:id', async (req,res) => {
+  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
+    res.status(401).json({"error":"token was not provided"})
+    return
+  }
+  if(!req.params['id']) {
+    res.status(400).json({'error':'messing required info'})
+    return
+  }
+  var id = req.params['id']
+  
+  let sql = `SELECT l.id,name,type,is_template,created_date, user_name, is_owner from list l join user_list_link ull on l.id == ull.list_id where l.id = ?`
+  let selectResults = await dbHelper.select(sql, [id], db)
+  if(selectResults.err) {
+    res.status(500).json({'error':'failed to get data'})
+    return
+  } else {
+    
+    let data = selectResults.rows.reduce((accumulator,currentValue) => {
+      if(accumulator.get(currentValue.id) == undefined) {
+        accumulator.set(currentValue.id, {
+          id:currentValue.id,
+          name:currentValue.name,
+          type:currentValue.type,
+          is_template:currentValue.is_template,
+          created_date:currentValue.created_date,
+          user_names:[currentValue.user_name],
+          items:[]})
+        return accumulator;
+      } else {
+        let value = accumulator.get(currentValue.id)
+        value.user_names = [...value.user_names, currentValue.user_name]
+        accumulator.set(currentValue.id,value)
+        return accumulator
+      }
+    },new Map())
+    data = data.get(parseInt(id))
+    
+    if(data) {
+      let itemSql = 'SELECT * from list_item where list_id = ?'
+      let itemData = await dbHelper.select(itemSql,[id],db)
+      data.items = itemData.rows
+    }
+    res.status(200).json(data)
+    return
+  }
 })
 
 app.get(HREF + '/userSiteLink', async (req,res) => {
@@ -458,6 +556,132 @@ app.get(HREF + '/userSiteLink', async (req,res) => {
     return
   }
   res.status(200).json([])
+  return
+})
+
+app.post(HREF + '/list/add', async (req,res) => {
+  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
+    res.status(401).json({"error":"token was not provided"})
+    return
+  }
+
+  let {name, type, is_template, user_name, user_names} = req.body
+  if(!name || !type || is_template == null || ! user_name || user_names == null) {
+    res.status(400).json({"error":"Required list info missing"})
+    return
+  }
+
+  let sql = 'INSERT INTO list (name, type, is_template) values(?,?,?) RETURNING id'
+  let results = await dbHelper.insertAndGet(sql,[name,type,is_template],db);
+  if(results.err) {
+    res.status(500).json({'error':'Error creating list'})
+    return
+  }
+
+  var sqlUserListLink = 'INSERT INTO user_list_link(user_name,list_id, is_owner) Values (?,?,?)'
+  var sqlUserLinstLinkParams = [user_name,results.rows.id,1]
+  if(user_names && user_names.length > 0) {
+    user_names.forEach((item) => {
+      sqlUserListLink += ',(?,?,?)'
+      sqlUserLinstLinkParams = [...sqlUserLinstLinkParams,item,results.rows.id,0]
+    })
+  }
+  let linkResults = await dbHelper.insertAndGet(sqlUserListLink,sqlUserLinstLinkParams,db)
+  if(linkResults.err) {
+    res.status(500).json({'error':'Error setting users for list'})
+    return
+  }
+
+  res.status(200).json({'success':'List created', 'id':results.rows.id})
+  return
+})
+
+app.post(HREF + '/list/addTemplate', async (req,res) => {
+  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
+    res.status(401).json({"error":"token was not provided"})
+    return
+  }
+
+  let {template_id, list_id} = req.body
+  if(list_id == null || template_id == null) {
+    res.status(400).json({"error":"Required list info missing"})
+    return
+  }
+  let insertSQL = `INSERT INTO list_item (name,count,list_id) select name,count,? as 'list_id' from list_item where list_id = ?`
+  insertResults = dbHelper.insert(insertSQL,[list_id,template_id],db)
+  if(insertResults.err) {
+    res.status(500).json({'error':'Error adding template items'})
+    return
+  }
+  res.status(200).json({'success':'Template items added'})
+})
+
+app.post(HREF + '/list/delete', async (req,res) => {
+  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
+    res.status(401).json({"error":"token was not provided"})
+    return
+  }
+  let {id} = req.body
+  if(!id) {
+    res.status(400).json({"error":"Required list info missing"})
+    return
+  }
+
+  let deleteItemsSQL = 'delete from list_item where list_id = ?'
+  let deleteItemResult = dbHelper.delete(deleteItemsSQL,[id],db)
+  if(deleteItemResult.err) {
+    res.status(500).json({"error":"error deleting list"})
+    return
+  }
+
+  let deleteSQL = 'delete from list where id=?'
+  let deleteResult = await dbHelper.delete(deleteSQL,[id],db)
+  if(deleteResult.err) {
+    res.status(500).json({"error":"error deleting list"})
+    return
+  }
+  res.status(200).json({'success':'list deleted'})
+  return
+})
+
+app.post(HREF + '/listItem/add', async (req,res) => {
+  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
+    res.status(401).json({"error":"token was not provided"})
+    return
+  }
+  let {list_id, name, count} = req.body
+  if(!name || list_id == null || !count) {
+    res.status(400).json({"error":"Required list item info missing"})
+    return
+  }
+
+  let insertSQL = 'insert into list_item (list_id,name,count) values (?,?,?) RETURNING id'
+  let insertResults = await dbHelper.insertAndGet(insertSQL,[list_id,name,count],db)
+  if(insertResults.err) {
+    res.status(500).json({"error":"error adding item"})
+    return
+  }
+  res.status(200).json({'success':'list item created','id':insertResults.rows.id})
+})
+
+app.post(HREF + '/listItem/delete', async (req,res) => {
+  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
+    res.status(401).json({"error":"token was not provided"})
+    return
+  }
+  let {id} = req.body
+  if(!id) {
+    res.status(400).json({"error":"Required list item info missing"})
+    return
+  }
+
+  let deleteSQL = 'delete from list_item where id=?'
+  let deleteResult = await dbHelper.delete(deleteSQL,[id],db)
+  if(deleteResult.err) {
+    res.status(500).json({"error":"error deleting item"})
+    return
+  }
+  res.status(200).json({'success':'list item deleted'})
   return
 })
 
@@ -595,19 +819,40 @@ app.post(HREF + '/request/add', async (req,res) => {
     res.status(401).json({"error":"token was not provided"})
     return
   }
-  let {type, message} = req.body
-  if(!type || !message) {
+  let {type, message, user_name} = req.body
+  if(!type || !message || !user_name) {
     res.status(400).json({"error":"Required requests info missing"})
     return
   }
   
-  let sql = 'INSERT INTO requests (type, message) values(?,?)'
-  let results = await dbHelper.insert(sql,[type,message],db);
+  let sql = 'INSERT INTO requests (type, message, user_name) values(?,?,?)'
+  let results = await dbHelper.insert(sql,[type,message,user_name],db);
   if(results.err) {
-    res.status(500).json({'error':'Error Creating request'})
+    res.status(500).json({'error':'Error creating request'})
     return
   }
-  res.status(200).json({'success':'request Created'})
+  res.status(200).json({'success':'Request created'})
+  return
+})
+
+app.post(HREF + '/requestMessage/add', async (req,res) => {
+  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
+    res.status(401).json({"error":"token was not provided"})
+    return
+  }
+  let {id, message, user_name} = req.body
+  if(id == null || !message || !user_name) {
+    res.status(400).json({"error":"Required requests info missing"})
+    return
+  }
+  
+  let sql = 'INSERT INTO request_message (request_id, message, user_name) values(?,?,?)'
+  let results = await dbHelper.insert(sql,[id,message,user_name],db);
+  if(results.err) {
+    res.status(500).json({'error':'Error creating request message'})
+    return
+  }
+  res.status(200).json({'success':'Request message created'})
   return
 })
 
@@ -666,7 +911,6 @@ app.get(HREF + '/users/game', async (req,res) => {
   let sql = 'SELECT * from user_game_link join game on game.name == user_game_link.game_name'
   let params = req.query
   if(params) {
-    //console.log(params)
     let whereClauses = []
     if(params.users) {
       let users = params.users.split(',')
