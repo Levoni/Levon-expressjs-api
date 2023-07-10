@@ -152,7 +152,7 @@ app.get(HREF + '/user', async (req,res) => {
   }
   var loweredName = decodedToken.name
 
-  var result = await dbHelper.select('SELECT name, guesses, correct_guesses, points, last_daily_guess, is_admin from user where name = ? LIMIT 1', [loweredName], db)
+  var result = await dbHelper.select('SELECT name, guesses, correct_guesses, points, last_daily_guess, is_admin, public from user where name = ? LIMIT 1', [loweredName], db)
   if(result.err) {
     res.status(400).json({"error":"No User with this name exists"})
   } else {
@@ -221,6 +221,36 @@ app.get(HREF + '/info/guess/user', async (req,res) => {
   var userGuessInfo = await dbHelper.select('Select * from guess where name = ? and guess_id = ?', [userResult.rows[0].name, currentNumber.rows[0].id], db)
   res.status(200).json({"guessInfo":userGuessInfo.rows, "numberId":currentNumber.rows[0].id})
   return
+})
+
+app.post(HREF + '/user/update/social', async (req,res) => {
+  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
+    res.status(401).json({"error":"token was not provided"})
+    return
+  }
+
+  var decodedToken
+  try{
+    decodedToken = jwt.verify(req.headers.authorization.split(' ')[1], secret)
+  } catch(error) {
+    res.status(401).json({"error":"auth token has expired"})
+    return
+  }
+  var loweredName = decodedToken.name
+
+  let {public} = req.body
+  if(public == null) {
+    res.status(400).json({"error":"Required update info missing"})
+    return
+  }
+  
+  let updateSQL = 'UPDATE user set public = ? where name = ?'
+  let updateResult = await dbHelper.update(updateSQL,[public, loweredName],db)
+  if(updateResult.err) {
+    res.status(500).json({'error':'update failed'})
+    return
+  }
+  res.status(200).json({'success':'user updated'})
 })
 
 app.post(HREF + '/guess/:number', async (req,res) => {
@@ -825,13 +855,13 @@ app.post(HREF + '/request/add', async (req,res) => {
     return
   }
   
-  let sql = 'INSERT INTO requests (type, message, user_name) values(?,?,?)'
-  let results = await dbHelper.insert(sql,[type,message,user_name],db);
+  let sql = 'INSERT INTO requests (type, message, user_name) values(?,?,?) RETURNING id'
+  let results = await dbHelper.insertAndGet(sql,[type,message,user_name],db);
   if(results.err) {
     res.status(500).json({'error':'Error creating request'})
     return
   }
-  res.status(200).json({'success':'Request created'})
+  res.status(200).json({'success':'Request created', id:results.rows.id})
   return
 })
 
