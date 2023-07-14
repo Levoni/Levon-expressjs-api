@@ -174,7 +174,7 @@ app.get(HREF + '/users', async (req,res) => {
     return
   }
 
-  var result = await dbHelper.select('SELECT name, guesses, correct_guesses, points, last_daily_guess, is_admin from user', [], db)
+  var result = await dbHelper.select('SELECT name, guesses, correct_guesses, points, last_daily_guess, is_admin, public from user where public = 1', [], db)
   if(result.err) {
     res.status(400).json({"error":"No User with this name exists"})
   } else {
