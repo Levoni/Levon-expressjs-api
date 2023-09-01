@@ -9,6 +9,7 @@ const HREF = process.env.appvirtdir ? process.env.appvirtdir : ''
 var db = require("./database.js")
 var dbHelper = require("./databaseHelper.js")
 var dateHelper = require("./dateHelper.js")
+var TicTacToe = require("./TicTacToe.js")
 var md5 = require('md5')
 
 const corsOpts = {
@@ -589,6 +590,105 @@ app.get(HREF + '/userSiteLink', async (req,res) => {
   return
 })
 
+app.get(HREF + '/totGame/overview/:userName', async (req,res) => {
+  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
+    res.status(401).json({"error":"token was not provided"})
+    return
+  }
+  let user_name = !req.params['userName']
+  if(!user_name) {
+    res.status(400).json({'error':'messing required info'})
+    return
+  }
+  console.log(user_name)
+  var sqlTotGame = 'SELECT * from tot_game tg join user_tot_game utg on tg.id = utg.tot_id where utg.user_name = ?'
+  var sqlTotGameParams = [user_name]
+  let linkResults = await dbHelper.select(sqlTotGame,sqlTotGameParams,db)
+  if(linkResults.err) {
+    res.status(500).json({'error':'Error getting Tot games'})
+    return
+  }
+
+  res.status(200).json({'success':'Tot game created', rows:results.rows})
+  return
+})
+
+app.post(HREF + '/totGame/add', async (req,res) => {
+  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
+    res.status(401).json({"error":"token was not provided"})
+    return
+  }
+
+  let {type, challangedUser, creatorUser} = req.body
+  if(!type || !challangedUser || !creatorUser) {
+    res.status(400).json({"error":"Required Tot game info missing"})
+    return
+  }
+
+  let insertSQL = `INSERT INTO tot_game(type,users,game_json,status,winner) values(?,?,'{}','pending','') returning id`
+  let insertResult = await dbHelper.insertAndGet(insertSQL, [type,`'${creator_user},${challangedUser}'`], db)
+  if(insertResult.err) {
+    res.status(500).json({'error':'Error creating tot game'})
+    return
+  }
+  let totGameId = insertResult.rows.id;
+  let linkInsertSQL = `INSERT INTO user_tot_game(user_name,tot_id,accepted,is_creator) values(?,?,?,?)`
+  let linkOneResult = await dbHelper.insert(linkInsertSQL, [creatorUser,totGameId,true,true], db)
+  let linkTwoResult = await dbHelper.insert(linkInsertSQL, [challangedUser,totGameId,false,false], db)
+  if(linkOneResult.err || linkTwoResult.err) {
+    res.status(500).json({'error':'Error creating tot game'})
+    return
+  }
+  res.status(200).json({'success':'Tot game created', 'id':totGameId})
+  return 
+})
+
+app.post(HREF + '/totGame/accept', async (req,res) => {
+  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
+    res.status(401).json({"error":"token was not provided"})
+    return
+  }
+
+  let {tot_id, userName} = req.body
+  if(!tot_id || !userName) {
+    res.status(400).json({"error":"Required Tot game info missing"})
+    return
+  }
+
+  let updateLinkSQL = `UPDATE user_tot_game set accepted = 1 where tot_id = ? and user_name = ?`
+  let insertLinkResult = await dbHelper.update(updateLinkSQL, [tot_id, userName], db)
+  let updateTotGameSQL = `UPDATE tot_game set status = 'accepted' where id = ?`
+  let insertTotGameResult = await dbHelper.update(updateTotGameSQL, [tot_id], db)
+  if(insertLinkResult.err || insertTotGameResult.err) {
+    res.status(500).json({'error':'Error accetping tot game'})
+    return
+  }
+  res.status(200).json({'success':'Tot game updated'})
+})
+
+app.post(HREF + 'totGame/delete/:id', async (req,res) => {
+  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
+    res.status(401).json({"error":"token was not provided"})
+    return
+  }
+
+  if(!req.params['id']) {
+    res.status(400).json({'error':'messing required info'})
+    return
+  }
+
+  var id = req.params['id']
+  var sqlDeleteTotGameLink = 'DELETE FROM user_tot_game where tot_id = ?'
+  let linkDelete = await dbHelper.delete(sqlDeleteTotGameLink,[id], db)
+  var sqlDeleteTotGame = 'DELETE FROM tot_game where id = ?'
+  let totGameDelete = await dbHelper.delete(sqlDeleteTotGame,[id], db)
+  if(linkDelete.err || totGameDelete.err) {
+    res.status(500).json({'error':'Error deleting tot games'})
+    return
+  }
+  res.status(200).json({'sucess':'tot game deleted'})
+})
+
 app.post(HREF + '/list/add', async (req,res) => {
   if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
     res.status(401).json({"error":"token was not provided"})
@@ -984,6 +1084,24 @@ app.get(HREF + '/users/game', async (req,res) => {
   }
   let result = await dbHelper.select(sql,[],db)
   res.status(200).json(result.rows)
+})
+
+app.post(HREF + '/game/action', async (req,res) => {
+  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
+    res.status(401).json({"error":"token was not provided"})
+    return
+  }
+  let {action, id} = req.body
+  if(!action && id != null) {
+    res.status(400).json({"error":"Required info missing"})
+    return
+  }
+  let result = TicTacToe.HandleTicTacToeAction(action, id, db,dbHelper)
+  if(result == "error") {
+    res.status(500).json({"error":"error handleing action"})
+  }
+  res.status(200).json(result)
+  return
 })
 
 
