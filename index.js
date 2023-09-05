@@ -565,13 +565,12 @@ app.get(HREF + '/userSiteLink', async (req,res) => {
     if(params.userName) {
       whereClauses.push(`user_name = '${params.userName}'`)
     }
-    if(params.spanDuration) {
+    if(params.spanDuration && params.span) {
       let startDate = params.date ? new Date(params.date) : new Date()
       whereClauses.push(`site_day_date <= '${dateHelper.GetYYYYMMDD(startDate)}'`)
       if(params.span == 'daily') {
         let dateObject = dateHelper.SubtractDays(startDate,1 * params.spanDuration)
         whereClauses.push(`site_day_date > '${dateHelper.GetYYYYMMDD(dateObject)}'`)
-
       }
       if(params.span == 'weekly') {
         let dateObject = dateHelper.SubtractDays(startDate,7 * params.spanDuration)
