@@ -618,12 +618,13 @@ app.get(HREF + '/totGame/overview/:userName', async (req,res) => {
     res.status(401).json({"error":"token was not provided"})
     return
   }
-  let user_name = !req.params['userName']
+
+  let user_name = req.params['userName']
   if(!user_name) {
     res.status(400).json({'error':'messing required info'})
     return
   }
-  console.log(user_name)
+
   var sqlTotGame = 'SELECT * from tot_game tg join user_tot_game utg on tg.id = utg.tot_id where utg.user_name = ?'
   var sqlTotGameParams = [user_name]
   let linkResults = await dbHelper.select(sqlTotGame,sqlTotGameParams,db)
@@ -632,7 +633,7 @@ app.get(HREF + '/totGame/overview/:userName', async (req,res) => {
     return
   }
 
-  res.status(200).json({'success':'Tot game created', rows:results.rows})
+  res.status(200).json(linkResults.rows)
   return
 })
 
@@ -641,7 +642,7 @@ app.post(HREF + '/totGame/add', async (req,res) => {
     res.status(401).json({"error":"token was not provided"})
     return
   }
-
+  
   let {type, challangedUser, creatorUser} = req.body
   if(!type || !challangedUser || !creatorUser) {
     res.status(400).json({"error":"Required Tot game info missing"})
@@ -649,7 +650,7 @@ app.post(HREF + '/totGame/add', async (req,res) => {
   }
 
   let insertSQL = `INSERT INTO tot_game(type,users,game_json,status,winner) values(?,?,'{}','pending','') returning id`
-  let insertResult = await dbHelper.insertAndGet(insertSQL, [type,`'${creator_user},${challangedUser}'`], db)
+  let insertResult = await dbHelper.insertAndGet(insertSQL, [type,`'${creatorUser},${challangedUser}'`], db)
   if(insertResult.err) {
     res.status(500).json({'error':'Error creating tot game'})
     return
@@ -667,11 +668,12 @@ app.post(HREF + '/totGame/add', async (req,res) => {
 })
 
 app.post(HREF + '/totGame/accept', async (req,res) => {
+  console.log('accept started')
   if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
     res.status(401).json({"error":"token was not provided"})
     return
   }
-
+  console.log(req.body)
   let {tot_id, userName} = req.body
   if(!tot_id || !userName) {
     res.status(400).json({"error":"Required Tot game info missing"})
@@ -689,7 +691,7 @@ app.post(HREF + '/totGame/accept', async (req,res) => {
   res.status(200).json({'success':'Tot game updated'})
 })
 
-app.post(HREF + 'totGame/delete/:id', async (req,res) => {
+app.post(HREF + '/totGame/delete/:id', async (req,res) => {
   if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
     res.status(401).json({"error":"token was not provided"})
     return
@@ -1109,7 +1111,7 @@ app.get(HREF + '/users/game', async (req,res) => {
   res.status(200).json(result.rows)
 })
 
-app.post(HREF + '/game/action', async (req,res) => {
+app.post(HREF + '/totGame/action', async (req,res) => {
   if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
     res.status(401).json({"error":"token was not provided"})
     return
