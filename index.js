@@ -10,6 +10,7 @@ var db = require("./database.js")
 var dbHelper = require("./databaseHelper.js")
 var dateHelper = require("./dateHelper.js")
 var TicTacToe = require("./TicTacToe.js")
+var Stratego = require("./Stratego.js")
 var md5 = require('md5')
 
 const corsOpts = {
@@ -637,6 +638,29 @@ app.get(HREF + '/totGame/overview/:userName', async (req,res) => {
   return
 })
 
+app.get(HREF + '/totGame/game/:id', async (req,res) => {
+  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
+    res.status(401).json({"error":"token was not provided"})
+    return
+  }
+
+  let id = req.params['id']
+  if(id == null) {
+    res.status(400).json({'error':'messing required info'})
+    return
+  }
+
+  var sqlTotGame = 'SELECT * from tot_game where id = ?'
+  var sqlTotGameParams = [id]
+  let linkResults = await dbHelper.select(sqlTotGame,sqlTotGameParams,db)
+  if(linkResults.err) {
+    res.status(500).json({'error':'Error getting Tot games'})
+    return
+  }
+  res.status(200).json(linkResults.rows)
+  return
+})
+
 app.post(HREF + '/totGame/add', async (req,res) => {
   if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
     res.status(401).json({"error":"token was not provided"})
@@ -1121,7 +1145,21 @@ app.post(HREF + '/totGame/action', async (req,res) => {
     res.status(400).json({"error":"Required info missing"})
     return
   }
-  let result = TicTacToe.HandleTicTacToeAction(action, id, db,dbHelper)
+  console.log(action)
+  console.log(id)
+
+  let getGameStateSQL = `SELECT FROM tot_game where id = ?`
+  let gameStateResult =  await dbHelper.select(getGameStateSQL, [id], db)
+  if(gameStateResult.err) {
+    return 'error'
+  }
+  let gameState = JSON.parse(gameStateResult.rows[0]);
+  var result = '{"error":"Error running command"}';
+  if(gameState.type = 'tic-tac-toe') {
+    result = TicTacToe.HandleTicTacToeAction(action, gameState, db, dbHelper)
+  } else if (gameState.type = 'stratego') {
+    result = Stratego.HandleTicTacToeAction(action, gameState, db, dbHelper)
+  }
   if(result == "error") {
     res.status(500).json({"error":"error handleing action"})
   }
