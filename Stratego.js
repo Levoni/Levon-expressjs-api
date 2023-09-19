@@ -174,8 +174,8 @@ module.exports = {
             returnCommands.push(`{"action":"sync","room":${JSON.stringify(gameState)}}`)
         }
 
-        let updateSQL = `UPDATE tot_game set game_json = ? where id = ?`
-        let updateResult = dbHelper.insert(updateSQL, [JSON.stringify(gameState),gameState.id], db)
+        let updateSQL = `UPDATE tot_game set game_json = ?, current_player = ? where id = ?`
+        let updateResult = dbHelper.insert(updateSQL, [JSON.stringify(gameState), gameState.currentPlayer,gameState.game_id], db)
         if(updateResult.err) {
             return 'error'
         }

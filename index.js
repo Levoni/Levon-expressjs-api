@@ -200,7 +200,7 @@ app.get(HREF + '/user/notification/preference', async (req,res) => {
   }
   if(selectResult.rows.length == 0) {
     let insertSQL = `INSERT INTO user_notification_preference(user_name) values(?)`
-    let insertResult = await dbHelper.insert(insertSQL[loweredName],db)
+    let insertResult = await dbHelper.insert(insertSQL,[loweredName],db)
     if(insertResult.err) {
       res.status(500).json({error:'error while getting notification preferences'})
       return
