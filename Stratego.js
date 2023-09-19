@@ -2,10 +2,10 @@ module.exports = {
     CreateStrategoGameState: () => {
         return {
             game_id: '',
-            type: '',
+            type: 'stratego',
             board:null,
             graveyard:  null,
-            state:'',
+            state:'stopped',
             currentPlayer:0,
             messages:[],
             lastMove:''
@@ -18,9 +18,9 @@ module.exports = {
             let row = []
             for(let y = 0; y < 10; y++) {
                 if((i == 4 || i == 5) && (y == 2 || y ==3 || y == 6 || y == 7)) {
-                    row.push(createStratigoBasicTile(1))
+                    row.push(module.exports.createStratigoBasicTile(1))
                 } else {
-                    row.push(createStratigoBasicTile(0))
+                    row.push(module.exports.createStratigoBasicTile(0))
                 }
             }
             board.push(row)
@@ -77,14 +77,15 @@ module.exports = {
         return graveyard
     },
 
-    HandleTicTacToeAction: async (command, gameState, db, dbHelper) => {
+    HandleStrategoAction: async (command, gameState, db, dbHelper) => {
         let returnCommands = []
         let data = JSON.parse(command)
 
         if(data.action == 'start') {
             gameState.state = 'placing'
-            gameState.board=createStratigoBasicBoard()
-            gameState.graveyard=createGraveyard()
+            gameState.board=module.exports.createStratigoBasicBoard()
+            gameState.graveyard=module.exports.createGraveyard()
+            gameState.currentPlayer = 0
             returnCommands.push(`{"action":"start"}`)
         } else if(data.action == 'place') {
             let placeIndex = gameState.graveyard.findIndex((element) => {return element.owner == data.player && element.power == data.power})
@@ -97,6 +98,8 @@ module.exports = {
             }
             if(gameState.graveyard.length == 0) {
                 returnCommands.push(`{"action":"allPiecesPlayed"}`)
+                gameState.currentPlayer = 1
+                gameState.state = 'started'
             }
         } else if(data.action == 'remove') {
             let piece = gameState.board[data.x][data.y].piece
@@ -117,41 +120,62 @@ module.exports = {
             if(endPiece == null) {
                 gameState.board[data.x][data.y].piece = piece
                 gameState.board[data.xStart][data.yStart].piece = null
+                gameState.currentPlayer = gameState.currentPlayer == 1 ? 2 : 1
+                gameState.lastMove = `${data.xStart}${data.yStart},${data.x}${data.y}:${piece.owner},${piece.power}:`
                 returnCommands.push(`{"action":"movePiece","xStart":"${data.xStart}","yStart":"${data.yStart}","x":"${data.x}","y":"${data.y}"}`)
             } else {
                 if(piece.power == 1 && endPiece.power == 10) {
                     gameState.board[data.xStart][data.yStart].piece = null
                     gameState.board[data.x][data.y].piece = piece
+                    gameState.graveyard.push(endPiece)
                 } else if (piece.power == 3 && endPiece.power == 11) {
                     gameState.board[data.xStart][data.yStart].piece = null
                     gameState.board[data.x][data.y].piece = piece
+                    gameState.graveyard.push(endPiece)
                 } else if (endPiece.power == 12) {
                     gameState.board[data.xStart][data.yStart].piece = null
                     gameState.board[data.x][data.y].piece = piece
+                    gameState.graveyard.push(endPiece)
                 } else if(piece.power > endPiece.power) {
                     gameState.board[data.xStart][data.yStart].piece = null
                     gameState.board[data.x][data.y].piece = piece
+                    gameState.graveyard.push(endPiece)
                 } else if(piece.power < endPiece.power) {
                     gameState.board[data.xStart][data.yStart].piece = null
+                    gameState.graveyard.push(piece)
                 } else {
                     gameState.board[data.xStart][data.yStart].piece = null
                     gameState.board[data.x][data.y].piece = null
+                    gameState.graveyard.push(piece)
+                    gameState.graveyard.push(endPiece)
                 }
                 returnCommands.push(`{"action":"battle","xStart":"${data.xStart}","yStart":"${data.yStart}","x":"${data.x}","y":"${data.y}"}`)
                 if(endPiece.power == 12) {
                     gameState.state = 'stopped'
+                    let winSQL = `UPDATE tot_game set status = 'complete', winner = (select user_name from user_tot_game where player_num = ? and tot_id = ?) where id = ?`
+                    let winResult = await dbHelper.update(winSQL,[gameState.currentPlayer, gameState.game_id, gameState.game_id].db)
+                    if(winResult.err) {
+                        return 'error'
+                    }
+                }
+                gameState.currentPlayer = gameState.currentPlayer == 1 ? 2 : 1
+                gameState.lastMove = `${data.xStart}${data.yStart},${data.x}${data.yStart}:${piece.owner},${piece.power}:`
+                if(endPiece) {
+                    gameState.lastMove += `${endPiece.owner},${endPiece.power}`
                 }
             }
         } else if(data.action == 'end') {
             returnCommands.push(`{"action":"end"}`)
+            gameState.state = 'stopped'
         } else if(data.action == 'message') {
-            returnCommands.push(`{"action":"message","message":"${users[uuid4.toString()].name}: ${data.message}"}`)
+            returnCommands.push(`{"action":"message","message":"${gameState.currentPlayer}: ${data.message}"}`)
+            gameState.messages.push(`${gameState.currentPlayer}: ${data.message}`)
         } else  if(data.action == 'sync') {
             returnCommands.push(`{"action":"sync","room":${JSON.stringify(gameState)}}`)
         }
 
-        let updateSQL = `UPDATE tot_game set game_json = ?`
-        let updateResult = dbHelper.insert(updateSQL, [gameState], db)
+        let updateSQL = `UPDATE tot_game set game_json = ? where id = ?`
+        let updateResult = dbHelper.insert(updateSQL, [JSON.stringify(gameState),gameState.id], db)
         if(updateResult.err) {
             return 'error'
         }

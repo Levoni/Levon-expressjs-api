@@ -32,6 +32,23 @@ app.use(express.json(),
         cors(corsOpts))
 
 
+const CheckForTokenAndRespond = (req,res) => {
+  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
+    res.status(401).json({"error":"token was not provided"})
+    return {error:'token was not provided',success:false, name:''}
+  }
+
+  var decodedToken
+  try{
+    decodedToken = jwt.verify(req.headers.authorization.split(' ')[1], secret)
+  } catch(error) {
+    res.status(401).json({"error":"auth token has expired"})
+    return {error:'auth token has expired',success:false, name:''}
+  }
+  var loweredName = decodedToken.name
+  return {error:'',success:true, name:loweredName}
+}
+
 
 app.get(HREF + '/', (req, res) => {
   res.send('Hello World!')
@@ -125,7 +142,7 @@ app.post(HREF + '/auth/user/refreshToken', async (req,res) => {
     res.status(400).json({"error":"No User exists for that name and password"})
     return
   }
-  
+
   fetch(HREF + 'https://oauth2.googleapis.com/token' +
   '?client_secret=' +
   '&grant_type=refresh_token' +
@@ -140,19 +157,11 @@ app.post(HREF + '/auth/user/refreshToken', async (req,res) => {
 })
 
 app.get(HREF + '/user', async (req,res) => {
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"token was not provided"})
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
     return
   }
-
-  var decodedToken
-  try{
-    decodedToken = jwt.verify(req.headers.authorization.split(' ')[1], secret)
-  } catch(error) {
-    res.status(401).json({"error":"auth token has expired"})
-    return
-  }
-  var loweredName = decodedToken.name
+  var loweredName = tokenResult.name
 
   var result = await dbHelper.select('SELECT name, guesses, correct_guesses, points, last_daily_guess, is_admin, public from user where name = ? LIMIT 1', [loweredName], db)
   if(result.err) {
@@ -163,16 +172,8 @@ app.get(HREF + '/user', async (req,res) => {
 })
 
 app.get(HREF + '/users', async (req,res) => {
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"token was not provided"})
-    return
-  }
-
-  var decodedToken
-  try{
-    decodedToken = jwt.verify(req.headers.authorization.split(' ')[1], secret)
-  } catch(error) {
-    res.status(401).json({"error":"auth token has expired"})
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
     return
   }
 
@@ -184,9 +185,37 @@ app.get(HREF + '/users', async (req,res) => {
   }
 })
 
+app.get(HREF + '/user/notification/preference', async (req,res) => {
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
+    return
+  }
+  var loweredName = tokenResult.name
+
+  let selectSQL = `select * from user_notification_preference where user_name = ?`
+  let selectResult = await dbHelper.select(selectSQL,[loweredName],db)
+  if(selectResult.err) {
+    res.status(500).json({error:'error while getting notification preferences'})
+    return
+  }
+  if(selectResult.rows.length == 0) {
+    let insertSQL = `INSERT INTO user_notification_preference(user_name) values(?)`
+    let insertResult = await dbHelper.insert(insertSQL[loweredName],db)
+    if(insertResult.err) {
+      res.status(500).json({error:'error while getting notification preferences'})
+      return
+    }
+    selectResult = await dbHelper.select(selectSQL,[loweredName],db)
+    res.status(200).json({success:'sucess',rows:selectResult.rows})
+    return
+  }
+  res.status(200).json({success:'sucess',rows:selectResult.rows})
+  return
+})
+
 app.get(HREF + '/numberWins', async (req,res) => {
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"token was not provided"})
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
     return
   }
 
@@ -200,19 +229,11 @@ app.get(HREF + '/numberWins', async (req,res) => {
 })
 
 app.get(HREF + '/info/guess/user', async (req,res) => {
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"token was not provided"})
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
     return
   }
-
-  var decodedToken
-  try{
-    decodedToken = jwt.verify(req.headers.authorization.split(' ')[1], secret)
-  } catch(error) {
-    res.status(401).json({"error":"auth token has expired"})
-    return
-  }
-  var loweredName = decodedToken.name
+  var loweredName = tokenResult.name
 
   var userResult = await dbHelper.selectUser(loweredName, db)
   if(userResult.err) {
@@ -226,26 +247,18 @@ app.get(HREF + '/info/guess/user', async (req,res) => {
 })
 
 app.post(HREF + '/user/update/social', async (req,res) => {
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"token was not provided"})
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
     return
   }
-
-  var decodedToken
-  try{
-    decodedToken = jwt.verify(req.headers.authorization.split(' ')[1], secret)
-  } catch(error) {
-    res.status(401).json({"error":"auth token has expired"})
-    return
-  }
-  var loweredName = decodedToken.name
+  var loweredName = tokenResult.name
 
   let {public} = req.body
   if(public == null) {
     res.status(400).json({"error":"Required update info missing"})
     return
   }
-  
+
   let updateSQL = 'UPDATE user set public = ? where name = ?'
   let updateResult = await dbHelper.update(updateSQL,[public, loweredName],db)
   if(updateResult.err) {
@@ -255,23 +268,34 @@ app.post(HREF + '/user/update/social', async (req,res) => {
   res.status(200).json({'success':'user updated'})
 })
 
+app.post(HREF + '/user/update/notificationPreference', async (req,res) => {
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
+    return
+  }
+  var loweredName = tokenResult.name
+  let {daily_guess,tot_game} = req.body
+  if(daily_guess == null && tot_game != null) {
+    res.status(400).json({"error":"Required update info missing"})
+    return
+  }
+  let updateSQL = 'UPDATE user_notification_preference set daily_guess = ?, tot_game = ? where user_name = ?'
+  let updateResult = await dbHelper.update(updateSQL,[daily_guess, tot_game, loweredName],db)
+  if(updateResult.err) {
+    res.status(500).json({'error':'update failed'})
+    return
+  }
+  res.status(200).json({'success':'user updated'})
+})
+
+//TODO: verify this method doesn't allow multiple subimsions form frontend
 app.post(HREF + '/guess/:number', async (req,res) => {
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"token was not provided"})
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
     return
   }
-  if(req.params.length == 0) {
-    res.status(400).json({"error":"path paramater number is required"})
-    return
-  }
-  var decodedToken
-  try{
-    decodedToken = jwt.verify(req.headers.authorization.split(' ')[1], secret)
-  } catch(error) {
-    res.status(401).json({"error":"auth token has expired"})
-    return
-  }
-  var loweredName = decodedToken.name
+
+  var loweredName = tokenResult.name
 
   var guess = req.params['number']
 
@@ -312,7 +336,7 @@ app.post(HREF + '/guess/:number', async (req,res) => {
         dbHelper.update(`Update user set guesses=?,last_daily_guess=? where name=?`,
         [user.guesses + 1, dateHelper.GetYYYYMMDDhhmmss(new Date()), user.name],
         db)
-        
+
         if(guess < numResults.rows[0]['Number']) {
           dbHelper.insert('INSERT into guess (guess_id,name,guess,result) values(?,?,?,?)',[numResults.rows[0].id,user.name,guess,'Incorrect, too low'],db)
           res.status(200).json({"result":false,"Message":"Incorrect, too low"})
@@ -326,7 +350,7 @@ app.post(HREF + '/guess/:number', async (req,res) => {
 
 })
 
-app.post(HREF + '/signup', (req,res) => {
+app.post(HREF + '/signup', async (req,res) => {
   let {name, password} = req.body
   if(!name || !password) {
     res.status(400).json({"error":"Sign up information not supplied in body"})
@@ -336,21 +360,23 @@ app.post(HREF + '/signup', (req,res) => {
   var encodedpassword = md5(password)
   var sql = 'INSERT INTO user (name, secret, guesses, correct_guesses, is_admin) VALUES (?,?,?,?, false)'
   var params = [loweredName, encodedpassword, 0, 0]
-  db.run(sql, params, (err, rows) => {
-    if(err) {
-      if(err.errno == 19) {
-        res.status(400).json({"error":'User already exists'})
-        return
-      } else {
-        res.status(500).json({"error":'Error when creating a new user'})
-        return
-      }
+  let result = await dbHelper.insert(sql,params,db)
+  if(result.err) {
+    if(err.errno == 19) {
+      res.status(400).json({"error":'User already exists'})
+      return
     } else {
-      let token = jwt.sign({name: loweredName}, secret, {expiresIn: "5h"})
-      res.status(200).json({"token":token})
+      res.status(500).json({"error":'Error when creating a new user'})
       return
     }
-  })
+  }
+  let insertSQL = `INSERT INTO user_notification_preferences(user_name) values(?)`
+  let insertResult = await dbHelper.insert(insertSQL[loweredName],db)
+  if(insertResult.err) {
+    res.status(500).json({error:`Error when creating a new user's preferences`})
+  }
+  let token = jwt.sign({name: loweredName}, secret, {expiresIn: "5h"})
+  res.status(200).json({"token":token})
 })
 
 app.post(HREF + '/login', async (req,res) => {
@@ -374,8 +400,8 @@ app.post(HREF + '/login', async (req,res) => {
 })
 
 app.get(HREF + '/game', async (req,res) => {
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"token was not provided"})
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
     return
   }
 
@@ -385,8 +411,8 @@ app.get(HREF + '/game', async (req,res) => {
 })
 
 app.get(HREF + '/site', async (req,res) => {
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"token was not provided"})
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
     return
   }
 
@@ -396,8 +422,8 @@ app.get(HREF + '/site', async (req,res) => {
 })
 
 app.get(HREF + '/request', async (req,res) => {
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"token was not provided"})
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
     return
   }
 
@@ -413,10 +439,11 @@ app.get(HREF + '/request', async (req,res) => {
 })
 
 app.get(HREF + '/request/:userName', async (req,res) => {
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"token was not provided"})
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
     return
   }
+
   if(!req.params['userName']) {
     res.status(400).json({'error':'messing required info'})
     return
@@ -435,8 +462,8 @@ app.get(HREF + '/request/:userName', async (req,res) => {
 })
 
 app.get(HREF + '/request_messages', async (req,res) => {
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"token was not provided"})
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
     return
   }
 
@@ -446,10 +473,11 @@ app.get(HREF + '/request_messages', async (req,res) => {
 })
 
 app.get(HREF + '/request_messages/:id', async (req,res) => {
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"token was not provided"})
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
     return
   }
+
   if(!req.params['id']) {
     res.status(400).json({'error':'messing required info'})
     return
@@ -463,8 +491,8 @@ app.get(HREF + '/request_messages/:id', async (req,res) => {
 })
 
 app.post(HREF + '/request_message/updateStatus', async (req,res) => {
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"token was not provided"})
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
     return
   }
 
@@ -485,10 +513,11 @@ app.post(HREF + '/request_message/updateStatus', async (req,res) => {
 })
 
 app.get(HREF + '/list/:userName', async (req,res) => {
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"token was not provided"})
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
     return
   }
+
   if(!req.params['userName']) {
     res.status(400).json({'error':'messing required info'})
     return
@@ -501,23 +530,24 @@ app.get(HREF + '/list/:userName', async (req,res) => {
 })
 
 app.get(HREF + '/list/quickview/:id', async (req,res) => {
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"token was not provided"})
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
     return
   }
+
   if(!req.params['id']) {
     res.status(400).json({'error':'messing required info'})
     return
   }
   var id = req.params['id']
-  
+
   let sql = `SELECT l.id,name,type,is_template,created_date, user_name, is_owner from list l join user_list_link ull on l.id == ull.list_id where l.id = ?`
   let selectResults = await dbHelper.select(sql, [id], db)
   if(selectResults.err) {
     res.status(500).json({'error':'failed to get data'})
     return
   } else {
-    
+
     let data = selectResults.rows.reduce((accumulator,currentValue) => {
       if(accumulator.get(currentValue.id) == undefined) {
         accumulator.set(currentValue.id, {
@@ -537,7 +567,7 @@ app.get(HREF + '/list/quickview/:id', async (req,res) => {
       }
     },new Map())
     data = data.get(parseInt(id))
-    
+
     if(data) {
       let itemSql = 'SELECT * from list_item where list_id = ?'
       let itemData = await dbHelper.select(itemSql,[id],db)
@@ -549,10 +579,11 @@ app.get(HREF + '/list/quickview/:id', async (req,res) => {
 })
 
 app.get(HREF + '/userSiteLink', async (req,res) => {
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"token was not provided"})
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
     return
   }
+
   let params = req.query
   console.log(params)
   if(params) {
@@ -585,7 +616,7 @@ app.get(HREF + '/userSiteLink', async (req,res) => {
         let dateObject = dateHelper.SubtractMonths(startDate,12 * params.spanDuration)
         whereClauses.push(`site_day_date > '${dateHelper.GetYYYYMMDD(dateObject)}'`)
       }
-      
+
     }
 
 
@@ -615,8 +646,8 @@ app.get(HREF + '/userSiteLink', async (req,res) => {
 })
 
 app.get(HREF + '/totGame/overview/:userName', async (req,res) => {
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"token was not provided"})
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
     return
   }
 
@@ -626,7 +657,7 @@ app.get(HREF + '/totGame/overview/:userName', async (req,res) => {
     return
   }
 
-  var sqlTotGame = 'SELECT * from tot_game tg join user_tot_game utg on tg.id = utg.tot_id where utg.user_name = ?'
+  var sqlTotGame = 'SELECT tg.*, utg.accepted, utg.is_creator from tot_game tg join user_tot_game utg on tg.id = utg.tot_id where utg.user_name = ?'
   var sqlTotGameParams = [user_name]
   let linkResults = await dbHelper.select(sqlTotGame,sqlTotGameParams,db)
   if(linkResults.err) {
@@ -638,20 +669,22 @@ app.get(HREF + '/totGame/overview/:userName', async (req,res) => {
   return
 })
 
-app.get(HREF + '/totGame/game/:id', async (req,res) => {
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"token was not provided"})
+app.get(HREF + '/totGame/game', async (req,res) => {
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
     return
   }
 
-  let id = req.params['id']
-  if(id == null) {
+
+  let id = req.query['id']
+  let userName = req.query['userName']
+  if(id == null || userName == null) {
     res.status(400).json({'error':'messing required info'})
     return
   }
 
-  var sqlTotGame = 'SELECT * from tot_game where id = ?'
-  var sqlTotGameParams = [id]
+  var sqlTotGame = 'SELECT tg.*, utg.accepted, utg.is_creator, utg.player_num from tot_game tg join user_tot_game utg on tg.id = utg.tot_id where tg.id = ? and utg.user_name = ?'
+  var sqlTotGameParams = [id, userName]
   let linkResults = await dbHelper.select(sqlTotGame,sqlTotGameParams,db)
   if(linkResults.err) {
     res.status(500).json({'error':'Error getting Tot games'})
@@ -662,42 +695,42 @@ app.get(HREF + '/totGame/game/:id', async (req,res) => {
 })
 
 app.post(HREF + '/totGame/add', async (req,res) => {
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"token was not provided"})
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
     return
   }
-  
+
   let {type, challangedUser, creatorUser} = req.body
   if(!type || !challangedUser || !creatorUser) {
     res.status(400).json({"error":"Required Tot game info missing"})
     return
   }
-
-  let insertSQL = `INSERT INTO tot_game(type,users,game_json,status,winner) values(?,?,'{}','pending','') returning id`
-  let insertResult = await dbHelper.insertAndGet(insertSQL, [type,`'${creatorUser},${challangedUser}'`], db)
+  let gameJson = type == 'tic-tac-toe' ? TicTacToe.CreateTicTacToeGameState() : Stratego.CreateStrategoGameState()
+  //TODO: Also get and store id in game_json
+  let insertSQL = `INSERT INTO tot_game(type,users,game_json,status,winner) values(?,?,?,'pending','') returning id`
+  let insertResult = await dbHelper.insertAndGet(insertSQL, [type,`'${creatorUser},${challangedUser}'`, JSON.stringify(gameJson)], db)
   if(insertResult.err) {
     res.status(500).json({'error':'Error creating tot game'})
     return
   }
   let totGameId = insertResult.rows.id;
-  let linkInsertSQL = `INSERT INTO user_tot_game(user_name,tot_id,accepted,is_creator) values(?,?,?,?)`
-  let linkOneResult = await dbHelper.insert(linkInsertSQL, [creatorUser,totGameId,true,true], db)
-  let linkTwoResult = await dbHelper.insert(linkInsertSQL, [challangedUser,totGameId,false,false], db)
+  let linkInsertSQL = `INSERT INTO user_tot_game(user_name,tot_id,accepted,is_creator,player_num) values(?,?,?,?,?)`
+  let linkOneResult = await dbHelper.insert(linkInsertSQL, [creatorUser,totGameId,true,true,1], db)
+  let linkTwoResult = await dbHelper.insert(linkInsertSQL, [challangedUser,totGameId,false,false,2], db)
   if(linkOneResult.err || linkTwoResult.err) {
     res.status(500).json({'error':'Error creating tot game'})
     return
   }
   res.status(200).json({'success':'Tot game created', 'id':totGameId})
-  return 
+  return
 })
 
 app.post(HREF + '/totGame/accept', async (req,res) => {
-  console.log('accept started')
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"token was not provided"})
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
     return
   }
-  console.log(req.body)
+
   let {tot_id, userName} = req.body
   if(!tot_id || !userName) {
     res.status(400).json({"error":"Required Tot game info missing"})
@@ -716,8 +749,8 @@ app.post(HREF + '/totGame/accept', async (req,res) => {
 })
 
 app.post(HREF + '/totGame/delete/:id', async (req,res) => {
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"token was not provided"})
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
     return
   }
 
@@ -739,8 +772,8 @@ app.post(HREF + '/totGame/delete/:id', async (req,res) => {
 })
 
 app.post(HREF + '/list/add', async (req,res) => {
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"token was not provided"})
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
     return
   }
 
@@ -776,8 +809,8 @@ app.post(HREF + '/list/add', async (req,res) => {
 })
 
 app.post(HREF + '/list/addTemplate', async (req,res) => {
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"token was not provided"})
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
     return
   }
 
@@ -796,10 +829,11 @@ app.post(HREF + '/list/addTemplate', async (req,res) => {
 })
 
 app.post(HREF + '/list/delete', async (req,res) => {
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"token was not provided"})
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
     return
   }
+
   let {id} = req.body
   if(!id) {
     res.status(400).json({"error":"Required list info missing"})
@@ -824,10 +858,11 @@ app.post(HREF + '/list/delete', async (req,res) => {
 })
 
 app.post(HREF + '/listItem/add', async (req,res) => {
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"token was not provided"})
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
     return
   }
+
   let {list_id, name, count} = req.body
   if(!name || list_id == null || !count) {
     res.status(400).json({"error":"Required list item info missing"})
@@ -844,10 +879,11 @@ app.post(HREF + '/listItem/add', async (req,res) => {
 })
 
 app.post(HREF + '/listItem/delete', async (req,res) => {
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"token was not provided"})
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
     return
   }
+
   let {id} = req.body
   if(!id) {
     res.status(400).json({"error":"Required list item info missing"})
@@ -865,10 +901,11 @@ app.post(HREF + '/listItem/delete', async (req,res) => {
 })
 
 app.post(HREF + '/game/add', async (req,res) => {
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"token was not provided"})
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
     return
   }
+
   let {name, platform, player_min, player_max, genre} = req.body
   if(!name || !platform || !player_min || !player_max || !genre) {
     res.status(400).json({"error":"Required game info missing"})
@@ -905,8 +942,8 @@ app.post(HREF + '/game/add', async (req,res) => {
 })
 
 app.post(HREF + '/gamelink/add', async (req,res) => {
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"token was not provided"})
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
     return
   }
 
@@ -923,7 +960,7 @@ app.post(HREF + '/gamelink/add', async (req,res) => {
     return
   }
   var loweredName = decodedToken.name
-  
+
 
   let selectSQL = 'Select * from user_game_link where user_name = ? and game_name = ?'
   let selectResults = await dbHelper.select(selectSQL,[loweredName, game_name],db)
@@ -955,10 +992,11 @@ app.post(HREF + '/gamelink/add', async (req,res) => {
 })
 
 app.post(HREF + '/site/add', async (req,res) => {
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"token was not provided"})
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
     return
   }
+
   let {name, reset_time, link} = req.body
   if(!name || !reset_time || !link) {
     res.status(400).json({"error":"Required site info missing"})
@@ -994,16 +1032,17 @@ app.post(HREF + '/site/add', async (req,res) => {
 })
 
 app.post(HREF + '/request/add', async (req,res) => {
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"token was not provided"})
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
     return
   }
+
   let {type, message, user_name} = req.body
   if(!type || !message || !user_name) {
     res.status(400).json({"error":"Required requests info missing"})
     return
   }
-  
+
   let sql = 'INSERT INTO requests (type, message, user_name) values(?,?,?) RETURNING id'
   let results = await dbHelper.insertAndGet(sql,[type,message,user_name],db);
   if(results.err) {
@@ -1015,16 +1054,17 @@ app.post(HREF + '/request/add', async (req,res) => {
 })
 
 app.post(HREF + '/requestMessage/add', async (req,res) => {
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"token was not provided"})
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
     return
   }
+
   let {id, message, user_name} = req.body
   if(id == null || !message || !user_name) {
     res.status(400).json({"error":"Required requests info missing"})
     return
   }
-  
+
   let sql = 'INSERT INTO request_message (request_id, message, user_name) values(?,?,?)'
   let results = await dbHelper.insert(sql,[id,message,user_name],db);
   if(results.err) {
@@ -1082,8 +1122,8 @@ app.post(HREF + '/userSiteLink/add', async (req,res) => {
 })
 
 app.get(HREF + '/users/game', async (req,res) => {
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"token was not provided"})
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
     return
   }
 
@@ -1126,7 +1166,7 @@ app.get(HREF + '/users/game', async (req,res) => {
         whereString += whereClauses[i]
       }
     }
-    
+
     let result = await dbHelper.select(sql + whereString,[],db)
     res.status(200).json(result.rows)
     return
@@ -1136,29 +1176,29 @@ app.get(HREF + '/users/game', async (req,res) => {
 })
 
 app.post(HREF + '/totGame/action', async (req,res) => {
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"token was not provided"})
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
     return
   }
+
   let {action, id} = req.body
   if(!action && id != null) {
     res.status(400).json({"error":"Required info missing"})
     return
   }
-  console.log(action)
-  console.log(id)
 
-  let getGameStateSQL = `SELECT FROM tot_game where id = ?`
+  let getGameStateSQL = `SELECT * FROM tot_game where id = ?`
   let gameStateResult =  await dbHelper.select(getGameStateSQL, [id], db)
   if(gameStateResult.err) {
     return 'error'
   }
-  let gameState = JSON.parse(gameStateResult.rows[0]);
+  let gameState = JSON.parse(gameStateResult.rows[0].game_json);
+  gameState.game_id = id
   var result = '{"error":"Error running command"}';
-  if(gameState.type = 'tic-tac-toe') {
-    result = TicTacToe.HandleTicTacToeAction(action, gameState, db, dbHelper)
-  } else if (gameState.type = 'stratego') {
-    result = Stratego.HandleTicTacToeAction(action, gameState, db, dbHelper)
+  if(gameState.type == 'tic-tac-toe') {
+    result = await TicTacToe.HandleTicTacToeAction(action, gameState, db, dbHelper)
+  } else if (gameState.type == 'stratego') {
+    result = await Stratego.HandleStrategoAction(action, gameState, db, dbHelper)
   }
   if(result == "error") {
     res.status(500).json({"error":"error handleing action"})
@@ -1167,7 +1207,129 @@ app.post(HREF + '/totGame/action', async (req,res) => {
   return
 })
 
+app.get(HREF + '/highscore', async (req,res) => {
+  let {game, date, limit} = req.query
+  if(!game) {
+    res.status(400).json({"error":"Required info missing"})
+    return
+  }
 
+  let getSQL = `Select * from high_scores where game = ? order by score desc LIMIT ${limit ? limit : 10}`
+  let getResult = await dbHelper.select(getSQL, [game], db)
+  if(getResult.err) {
+    res.status(500).json({'error':'Error getting data','data':[]})
+    return
+  }
+  res.status(200).json({'success':'Success','data':getResult.rows})
+  return
+})
+
+app.post(HREF + '/highscore/submit', async (req,res) => {
+  let {game, score, userName, password} = req.body
+  if(!game || !score || !userName || !password) {
+    res.status(400).json({"error":"Required info missing"})
+    return
+  }
+
+  let loweredName = userName.toLowerCase()
+  var encodedpassword = md5(password)
+  let selectResult = await dbHelper.select('SELECT * from user where name = ? and secret = ? LIMIT 1', [loweredName, encodedpassword],db)
+  if(selectResult.err) {
+    res.status(500).json({"error":"Error on server when verifying user"})
+    return
+  }
+  if(!selectResult.rows || selectResult.rows.length == 0) {
+    res.status(400).json({"error":"No user with specified user name and password"})
+    return
+  }
+  let user = selectResult.rows[0]
+  let getHighScoreSQL = `Select * from high_scores where user_name = ?`
+  let getHighScoreResult = await dbHelper.select(getHighScoreSQL,[user.name],db)
+  if(getHighScoreResult.err) {
+    res.status(500).json({"error":"Error on server when verifying user"})
+    return
+  }
+  if(!getHighScoreResult.rows || getHighScoreResult.rows.length == 0) {
+    let insertSQL = `insert into high_scores(game,user_name,score,display_name) values(?,?,?,?)`
+    let insertResult = await dbHelper.insert(insertSQL,[game,user.name,score,user.name],db)
+    if(insertResult.err) {
+      res.status(500).json({error:'Error on server when creating record'})
+      return
+    }
+    res.status(200).json({success:'Score created'})
+    return
+  } else {
+    if(score > getHighScoreResult.rows[0].score) {
+      let updateSQL = `update high_scores set score = ? where id = ?`
+      let updateResult = await dbHelper.update(updateSQL,[score,getHighScoreResult.rows[0].id],db)
+      if(updateResult.err) {
+        res.status(500).json({error:'Error on server when updating record'})
+        return
+      }
+      res.status(200).json({success:'Score updated'})
+      return
+    } else {
+      res.status(200).json({success:'No update, higher score already exists'})
+      return
+    }
+  }
+})
+
+app.get(HREF + '/notifications', async (req,res) => {
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
+    return
+  }
+
+  let {userName} = req.query
+  if(!userName) {
+    res.status(400).json({"error":"Required info missing"})
+    return
+  }
+
+  let selectSQL = `select * from user u join user_notification_preference unp on u.name = unp.user_name where user_name = ?`
+  let selectResult = await dbHelper.select(selectSQL,[userName],db)
+  if(selectResult.err) {
+    res.status(500).json({error:'error while getting notification settings'})
+    return
+  }
+  if(!selectResult || selectResult.rows.length == 0) {
+    res.status(200).json({success:"No settings for user", rows:[]})
+    return
+  }
+  let NotificationList = []
+  let preferences = selectResult.rows[0]
+  if(preferences.daily_guess) {
+    const lastGuessDate = new Date(preferences.last_daily_guess + 'Z')
+    const currentDate = new Date()
+    if(lastGuessDate.getUTCDate() != currentDate.getUTCDate() ||
+      lastGuessDate.getUTCMonth() != currentDate.getUTCMonth()) {
+        NotificationList.push({type:'Daily Guess',message:'Your daily guess is available',link:'/game/dailyGuess'})
+    }
+  }
+  if(preferences.tot_game) {
+    let totGameSelect = `Select * from tot_game tg join user_tot_game utg on tg.id = utg.tot_id where utg.user_name = ?`
+    let totGameResult = await dbHelper.select(totGameSelect,[userName],db)
+    if(totGameResult.err) {
+      res.status(500).json({'error':'error while getting notifications'})
+      return
+    }
+    totGameResult.rows.forEach(element => {
+      if(!element.accepted) {
+        NotificationList.push({type:'Tot game challage',message:`You have been challanged to a ${element.type} game.`,link:`/game/totGames`})
+      }
+      if(element.status == 'accepted' && (element.current_player == element.player_num || element.current_player == 0)) {
+        NotificationList.push({type:'Tot game turn',message:`It is your turn in a ${element.type} game`,link:`/game/totGames/game?id=${element.tot_id}`})
+      }
+    });
+  }
+  if(preferences.daily_quiz_results) {
+    // let resultsSelect = ``
+    // let resultsResults = await dbHelper.select(resultsSelect,[],db)
+  }
+  res.status(200).json({success:'notifications found', rows:NotificationList})
+  return
+})
 
 app.listen(process.env.PORT ? process.env.PORT : port, (err) => {
   if(err) {
