@@ -327,10 +327,10 @@ app.post(HREF + '/guess/:number', async (req,res) => {
         [user.correct_guesses + 1, user.guesses + 1, dateHelper.GetYYYYMMDDhhmmss(new Date()), user.points + 1000, user.name],
         db)
         dbHelper.update(`Update Numbers set winner=? where id=?`,[user.name, numResults.rows[0].id], db)
-        dbHelper.insert('INSERT into guess (guess_id,name,guess,result) values(?,?,?,?)',[numResults.rows[0].id,user.name,guess,'Congradulations! You guessed correcttly'],db)
+        dbHelper.insert('INSERT into guess (guess_id,name,guess,result) values(?,?,?,?)',[numResults.rows[0].id,user.name,guess,'Congratulations! You guessed correcttly'],db)
         let randomNumber = Math.floor(Math.random() * 100)
         dbHelper.insert('INSERT into Numbers (Number) values (?)',[randomNumber],db)
-        res.status(200).json({"result":true,"Message":"Congradulations! You guessed correcttly"})
+        res.status(200).json({"result":true,"Message":"Congratulations! You guessed correcttly"})
         return
       } else {
         dbHelper.update(`Update user set guesses=?,last_daily_guess=? where name=?`,
