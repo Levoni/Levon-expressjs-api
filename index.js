@@ -1213,9 +1213,18 @@ app.get(HREF + '/highscore', async (req,res) => {
     res.status(400).json({"error":"Required info missing"})
     return
   }
+  var startDate = '1900-01-01'
+  var endDate = '3000-01-01'
+  
+  if(date != null) {
+    let d = new Date(date)
+    startDate = dateHelper.GetYYYYMMDD(d)
+    dateHelper.AddDays(d,1)
+    endDate = dateHelper.GetYYYYMMDD(d)
+  }
 
-  let getSQL = `Select * from high_scores where game = ? order by score desc LIMIT ${limit ? limit : 10}`
-  let getResult = await dbHelper.select(getSQL, [game], db)
+  let getSQL = `Select * from high_scores where game = ? and created_on < ? and created_on > ? order by score desc LIMIT ${limit ? limit : 10}`
+  let getResult = await dbHelper.select(getSQL, [game,endDate,startDate], db)
   if(getResult.err) {
     res.status(500).json({'error':'Error getting data','data':[]})
     return
@@ -1243,13 +1252,14 @@ app.post(HREF + '/highscore/submit', async (req,res) => {
     return
   }
   let user = selectResult.rows[0]
-  let getHighScoreSQL = `Select * from high_scores where user_name = ?`
-  let getHighScoreResult = await dbHelper.select(getHighScoreSQL,[user.name],db)
+  let getHighScoreSQL = `Select * from high_scores where user_name = ? and game = ? order by created_on desc LIMIT 1`
+  let getHighScoreResult = await dbHelper.select(getHighScoreSQL,[user.name, game],db)
   if(getHighScoreResult.err) {
     res.status(500).json({"error":"Error on server when verifying user"})
     return
   }
-  if(!getHighScoreResult.rows || getHighScoreResult.rows.length == 0) {
+  if((!getHighScoreResult.rows || getHighScoreResult.rows.length == 0) ||
+      dateHelper.GetYYYYMMDD(new Date(getHighScoreResult.rows[0].created_on)) != dateHelper.GetYYYYMMDD(new Date()) ) {
     let insertSQL = `insert into high_scores(game,user_name,score,display_name) values(?,?,?,?)`
     let insertResult = await dbHelper.insert(insertSQL,[game,user.name,score,user.name],db)
     if(insertResult.err) {

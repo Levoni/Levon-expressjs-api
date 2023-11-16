@@ -25,5 +25,17 @@ module.exports = {
         var dateOffset = (24*60*60*1000) * days; //5 days
         date.setTime(date.getTime() - dateOffset);
         return date
-    }
+    },
+    AddMonths: (date, months) => {
+        return new Date(
+            date.getUTCFullYear(),
+            date.getUTCMonth() + months, 
+            date.getUTCDate()
+        );
+    },
+    AddDays: (date, days) => {
+        var dateOffset = (24*60*60*1000) * days; //5 days
+        date.setTime(date.getTime() + dateOffset);
+        return date
+    },
 }
