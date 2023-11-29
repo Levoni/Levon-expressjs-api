@@ -207,7 +207,7 @@ app.get(HREF + '/user/notification/preference', async (req,res) => {
     }
     selectResult = await dbHelper.select(selectSQL,[loweredName],db)
     res.status(200).json({success:'sucess',rows:selectResult.rows})
-    return
+    return;
   }
   res.status(200).json({success:'sucess',rows:selectResult.rows})
   return
@@ -1208,7 +1208,7 @@ app.post(HREF + '/totGame/action', async (req,res) => {
 })
 
 app.get(HREF + '/highscore', async (req,res) => {
-  let {game, date, limit} = req.query
+  let {game, date, limit, start} = req.query
   if(!game) {
     res.status(400).json({"error":"Required info missing"})
     return
@@ -1223,7 +1223,7 @@ app.get(HREF + '/highscore', async (req,res) => {
     endDate = dateHelper.GetYYYYMMDD(d)
   }
 
-  let getSQL = `Select * from high_scores where game = ? and created_on < ? and created_on > ? order by score desc LIMIT ${limit ? limit : 10}`
+  let getSQL = `Select * from high_scores where game = ? and created_on < ? and created_on > ? order by score desc LIMIT ${limit ? limit : 10} OFFSET ${start ? start : 0}`
   let getResult = await dbHelper.select(getSQL, [game,endDate,startDate], db)
   if(getResult.err) {
     res.status(500).json({'error':'Error getting data','data':[]})
