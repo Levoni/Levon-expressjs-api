@@ -11,6 +11,7 @@ var dbHelper = require("./databaseHelper.js")
 var dateHelper = require("./dateHelper.js")
 var TicTacToe = require("./TicTacToe.js")
 var Stratego = require("./Stratego.js")
+var fileHelper = require("./FileHelper.js")
 var md5 = require('md5')
 
 const corsOpts = {
@@ -28,7 +29,7 @@ const corsOpts = {
   ],
 };
 
-app.use(express.json(),
+app.use(express.json({limit:'10mb'}),
         cors(corsOpts))
 
 
@@ -1218,9 +1219,9 @@ app.get(HREF + '/highscore', async (req,res) => {
   
   if(date != null) {
     let d = new Date(date)
-    startDate = dateHelper.GetYYYYMMDD(d)
+    startDate = dateHelper.GetYYYYMMDDhhmmss(d)
     dateHelper.AddDays(d,1)
-    endDate = dateHelper.GetYYYYMMDD(d)
+    endDate = dateHelper.GetYYYYMMDDhhmmss(d)
   }
 
   let getSQL = `Select * from high_scores where game = ? and created_on < ? and created_on > ? order by score desc LIMIT ${limit ? limit : 10} OFFSET ${start ? start : 0}`
@@ -1288,6 +1289,7 @@ app.post(HREF + '/highscore/submit', async (req,res) => {
 app.get(HREF + '/notifications', async (req,res) => {
   let tokenResult = CheckForTokenAndRespond(req,res);
   if(!tokenResult.success) {
+    res.status(500).json({"error":tokenResult.error})
     return
   }
 
@@ -1340,6 +1342,202 @@ app.get(HREF + '/notifications', async (req,res) => {
   res.status(200).json({success:'notifications found', rows:NotificationList})
   return
 })
+
+app.get(HREF + '/FileList', async (req,res) => {
+  let {drive,size, page, withPreview} = req.query
+  if(!drive) {
+    res.status(400).json({"error":"Required info missing"})
+    return
+  }
+  let sizeNum = !size ? 20 : parseInt(size)
+  let pageNum = !page ? 0 : parseInt(page)
+  let isPreview = withPreview=='false' ? false : true
+  var files = await fileHelper.GetFiles(drive, sizeNum, pageNum * sizeNum,isPreview);
+  console.log("method done")
+  res.status(200).json(files);
+})
+
+app.get(HREF + '/File', async (req,res) => {
+  let {drive, name} = req.query
+  if(!drive || !name) {
+    res.status(400).json({"error":"Required info missing"})
+    return
+  }
+
+  var file = await fileHelper.GetFile(name,drive);
+  res.status(200).json({data: file})
+})
+
+app.post(HREF + '/PostFile', async (req,res) => {
+  let {name, drive, data} = req.body
+  if(!name || !drive || !data) {
+    res.status(400).json({"error":"Required info missing"})
+    return
+  }
+  await fileHelper.CreateFile(name,drive,data)
+  res.status(200).json({success:'File Uploaded'})
+})
+
+app.post(HREF + '/DeleteFile', async (req,res) => {
+  let {name, drive} = req.body
+  var result = await fileHelper.DeleteFile(name,drive)
+  res.status(200).json({success:result})
+})
+
+//TODO: test everything below this
+
+app.get(HREF + '/Drive', async (req,res) => {
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
+    res.status(500).json({"error":tokenResult.error})
+    return
+  }
+
+  let selectSQL = "Select s.id,s.name,s.path,usl.user_name,usl.is_owner from drive s join user_drive_link usl on s.id = usl.drive_id where usl.user_name = ?"
+  let selectResult = await dbHelper.select(selectSQL,[tokenResult.name],db)
+  if(selectResult.err) {
+    res.status(500).json({error:'error getting shares'})
+  }
+  res.status(200).json(selectResult.rows)
+})
+
+app.get(HREF + '/Drive/users', async (req,res) => {
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
+    return
+  }
+
+  let {driveid} = req.query
+  if(!driveid) {
+    res.status(400).json({"error":"Required info missing"})
+    return
+  }
+  
+  let selectSQL = "Select user_name from user_drive_link where drive_id = ?"
+  let selectResult = await dbHelper.select(selectSQL,[driveid],db)
+  if(selectResult.err) {
+    res.status(500).json({error:'error getting users of share'})
+    return
+  }
+  res.status(200).json(selectResult.rows)
+})
+
+app.post(HREF + '/Drive/users/update',async (req,res) => {
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
+    res.status(500).json({"error":tokenResult.error})
+    return
+  }
+
+  let {users,driveId} = req.body
+  if(users == null || driveId == null) {
+    res.status(400).json({"error":"Required info missing"})
+    return
+  }
+  let getDriveUsersQuery = 'SELECT * FROM user_drive_link where drive_id = ?'
+  let getDriveUsersResult = await dbHelper.select(getDriveUsersQuery,[driveId],db)
+  if(getDriveUsersResult.err) {
+    res.status(500).json({error:'Failed to update users'})
+  }
+  let currentDriveUsers = getDriveUsersResult.rows
+
+  await Promise.all(users.map(async element => {
+    const i = currentDriveUsers.findIndex(e => e.user_name == element); 
+    if (i > -1) {
+      currentDriveUsers.splice(i,1)
+    } else {
+      let inserUserLink = 'INSERT INTO user_drive_link (drive_id,user_name,is_owner) VALUES (?,?,?)'
+      let inserResult = await dbHelper.insert(inserUserLink,[driveId,element,false],db)
+    }
+  }))
+  if(currentDriveUsers.length > 0) {
+    await Promise.all(currentDriveUsers.map(async  element => {
+      let deleteUserLink = 'DELETE FROM user_drive_link where drive_id = ? and user_name = ?'
+      let result = await dbHelper.delete(deleteUserLink,[driveId,element.user_name],db)
+    }))
+  }
+  res.status(200).json({success:'users updated'})
+})
+
+app.post(HREF + '/Drive/create', async (req,res) => {
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
+    return
+  }
+
+  let {drive} = req.body
+  if(!drive) {
+    res.status(400).json({"error":"Required info missing"})
+    return
+  }
+
+  let selectShareNames = 'Select name from drive'
+  let selectSharenamesResult = await dbHelper.select(selectShareNames,[],db)
+  if(selectSharenamesResult.err) {
+    res.status(500).json({error:'failed to create drive'})
+  }
+  let index = selectSharenamesResult.rows.findIndex(x => {return x.name == drive})
+  if(index != -1 || drive == 'users') {
+    res.status(500).json({error:'Drive with that name already exists'})
+    return
+  }
+  var result = fileHelper.CreateDirectory(drive)
+  if(!result) {
+    res.status(500).json({error:'Failed to create directory'})
+    return
+  }
+  let insertDriveSql = 'Insert INTO drive (name,path,creator_name) VALUES (?,?,?) returning id'
+  let insertDriveResult = await dbHelper.insertAndGet(insertDriveSql,[drive,drive, tokenResult.name],db)
+  if(insertDriveResult.err) {
+    res.status(500).json({error:'Failed to create drive record'})
+    return
+  }
+  let driveId = insertDriveResult.rows.id
+  let insertUserDriveLink = 'INSERT INTO user_drive_link (drive_id,user_name,is_owner) VALUES (?,?,?)'
+  let insertUserDriveLinkResult = await dbHelper.insert(insertUserDriveLink,[driveId,tokenResult.name,true],db)
+  if(insertUserDriveLinkResult.err) {
+    res.status(500).json({error:'Failed to create user drive link'})
+    return
+  }
+  res.status(200).json({success:'Drive created', id: driveId})
+})
+
+app.post('/Drive/delete', async (req,res) => {
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
+    res.status(500).json({"error":tokenResult.error})
+    return
+  }
+
+  let {driveId} = req.body
+  if(driveId == null) {
+    res.status(400).json({"error":"Required info missing"})
+    return
+  }
+  let GetDriveQuery = 'SELECT * from drive where id = ?'
+  let getDriveResults = await dbHelper.select(GetDriveQuery,[driveId],db)
+  if(!getDriveResults.rows || getDriveResults.rows.length == 0) {
+    res.status(500).json({error:'No Drive with that id to delete'})
+    return
+  }
+  let deleteDirectoryResult = fileHelper.DeleteDirectory(getDriveResults.rows[0].path)
+  if(!deleteDirectoryResult) {
+    res.status(500).json({error:'Failed to delete files'})
+    return
+  }
+  let deleteLinkQuery = 'DELETE FROM user_drive_link where drive_id = ?'
+  let deleteLinkResults = await dbHelper.delete(deleteLinkQuery,[driveId],db)
+  if(deleteLinkResults.err) {
+    res.status(500).json({error:'Failed to delete user link records'})
+  }
+  let deleteDriveQuery = 'DELETE FROM drive where id = ?'
+  let deleteDriveResults = await dbHelper.delete(deleteDriveQuery,[driveId],db)
+  if(deleteDriveResults.err) {
+    res.status(500).json({error:'failed to delete drive record'})
+  }
+  res.status(200).json({success:'drive deleted'})
+})
+
 
 app.listen(process.env.PORT ? process.env.PORT : port, (err) => {
   if(err) {
