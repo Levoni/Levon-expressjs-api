@@ -2,8 +2,8 @@ const express = require('express')
 const cors = require('cors')
 const jwt = require('jsonwebtoken')
 const app = express()
-const port = 3752
-const secret = 'VerySecret'
+require('dotenv').config()
+const secret = process.env.salt
 const HREF = process.env.appvirtdir ? process.env.appvirtdir : ''
 
 var db = require("./database.js")
@@ -12,6 +12,7 @@ var dateHelper = require("./dateHelper.js")
 var TicTacToe = require("./TicTacToe.js")
 var Stratego = require("./Stratego.js")
 var fileHelper = require("./FileHelper.js")
+var mailHelper = require("./mailHelper.js")
 var md5 = require('md5')
 
 const corsOpts = {
@@ -164,7 +165,7 @@ app.get(HREF + '/user', async (req,res) => {
   }
   var loweredName = tokenResult.name
 
-  var result = await dbHelper.select('SELECT name, guesses, correct_guesses, points, last_daily_guess, is_admin, public from user where name = ? LIMIT 1', [loweredName], db)
+  var result = await dbHelper.select('SELECT name, guesses, correct_guesses, points, last_daily_guess, is_admin, public, email from user where name = ? LIMIT 1', [loweredName], db)
   if(result.err) {
     res.status(400).json({"error":"No User with this name exists"})
   } else {
@@ -289,6 +290,28 @@ app.post(HREF + '/user/update/notificationPreference', async (req,res) => {
   res.status(200).json({'success':'user updated'})
 })
 
+app.post(HREF + '/user/update/email', async (req,res) => {
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
+    return
+  }
+  var loweredName = tokenResult.name
+
+  let {email} = req.body
+  if(!email) {
+    res.status(400).json({"error":"Required update info missing"})
+    return
+  }
+
+  let updateSQL = 'UPDATE user set email = ? where name = ?'
+  let updateResult = await dbHelper.update(updateSQL,[email, loweredName],db)
+  if(updateResult.err) {
+    res.status(500).json({'error':'update failed'})
+    return
+  }
+  res.status(200).json({'success':'user updated'})
+})
+
 //TODO: verify this method doesn't allow multiple subimsions form frontend
 app.post(HREF + '/guess/:number', async (req,res) => {
   let tokenResult = CheckForTokenAndRespond(req,res);
@@ -391,7 +414,7 @@ app.post(HREF + '/login', async (req,res) => {
   var encodedpassword = md5(password)
   let selectResult = await dbHelper.select('SELECT * from user where name = ? and secret = ? LIMIT 1', [loweredName, encodedpassword],db)
   if(!selectResult.rows || selectResult.rows.length == 0) {
-    res.status(400).json({"error":"User does not exist"})
+    res.status(400).json({"error":"User does not exist with specified username and password"})
     return
   } else {
     let token = jwt.sign({name: selectResult.rows[0].name}, secret, {expiresIn: "5h"})
@@ -1260,7 +1283,7 @@ app.post(HREF + '/highscore/submit', async (req,res) => {
     return
   }
   if((!getHighScoreResult.rows || getHighScoreResult.rows.length == 0) ||
-      dateHelper.GetYYYYMMDD(new Date(getHighScoreResult.rows[0].created_on)) != dateHelper.GetYYYYMMDD(new Date()) ) {
+      dateHelper.GetYYYYMMDD(new Date(getHighScoreResult.rows[0].created_on + 'Z')) != dateHelper.GetYYYYMMDD(new Date()) ) {
     let insertSQL = `insert into high_scores(game,user_name,score,display_name) values(?,?,?,?)`
     let insertResult = await dbHelper.insert(insertSQL,[game,user.name,score,user.name],db)
     if(insertResult.err) {
@@ -1425,7 +1448,6 @@ app.get(HREF + '/Drive/users', async (req,res) => {
 app.post(HREF + '/Drive/users/update',async (req,res) => {
   let tokenResult = CheckForTokenAndRespond(req,res);
   if(!tokenResult.success) {
-    res.status(500).json({"error":tokenResult.error})
     return
   }
 
@@ -1538,8 +1560,93 @@ app.post('/Drive/delete', async (req,res) => {
   res.status(200).json({success:'drive deleted'})
 })
 
+app.post('/startPasswordReset',async (req,res) => {
+  let {email,username} = req.body
+  if(email == null || username == null) {
+    res.status(400).json({"error":"Required info missing"})
+    return
+  }
 
-app.listen(process.env.PORT ? process.env.PORT : port, (err) => {
+  //Verify it is the right user
+  let getUserSql = 'SELECT * from user where name = ? and email = ?'
+  let getUserResult = await dbHelper.select(getUserSql,[username,email],db)
+  if(getUserResult.err) {
+    res.status(500).json({error:'error starting reset process'})
+    return
+  }
+  if(!getUserResult.rows || getUserResult.rows.length == 0) {
+    //Send a success even though no email sent to protect privacy
+    res.status(200).json({success: 'Reset Password Email Sent'})
+    return
+  }
+
+  //Generate reset code
+  let resetCode = Math.random().toString(36).slice(2)
+
+  //Insert reset
+  let resetSQL = `Insert into reset (type,reset_code,user_name,valid_length) values(?,?,?,?)`
+  let resetResult = await dbHelper.insert(resetSQL,['password',resetCode,username,30],db)
+  if(resetResult.err) {
+    res.status(500).json({error:'error starting reset process'})
+    return
+  }
+
+  try{
+    result = await mailHelper.SendMail(email,resetCode)
+    res.status(200).json({})
+    return
+  } catch(ex) {
+    console.log(ex)
+    res.status(500).json({error:ex})
+    return
+  }
+})
+
+app.post('/resetPassword',async (req,res) => {
+  let {password,resetCode} = req.body
+  if(password == null || resetCode == null) {
+    res.status(400).json({"error":"Required info missing"})
+    return
+  }
+
+  //Get reset record
+  let getResetSql = 'SELECT * from reset where reset_code = ? order by created_on desc limit 1'
+  let getResetResult = await dbHelper.select(getResetSql,[resetCode],db)
+  if(getResetResult.err) {
+    res.status(500).json({error:'error reseting password'})
+    return
+  }
+  if(!getResetResult.rows || getResetResult.rows == 0) {
+    res.status(500).json({error:`couldn't reset password, try starting over`})
+    return
+  }
+  let resetRecord = getResetResult.rows[0]
+  let validToDate = new Date(dateHelper.AddMinutes(new Date(resetRecord.created_on + 'Z'),30).toString() + 'Z')
+  if(validToDate < new Date() ) {
+    res.status(500).json({error:'reset code is no longer valid'})
+    return
+  }
+
+  //Delete reset record
+  let deleteResetSql = 'DELETE from reset where id = ?'
+  let deleteResetResult = await dbHelper.delete(deleteResetSql,[resetRecord.id],db)
+  if(deleteResetResult.err) {
+    res.status(500).json({error:'error reseting password'})
+    return
+  }
+
+  //Update password
+  let encodedPassword = md5(password)
+  let updateSql = `UPDATE user set secret = ? where name = ?`
+  let updateResult = await dbHelper.update(updateSql,[encodedPassword,resetRecord.user_name],db)
+  if(updateResult.err) {
+    res.status(500).json({error:`Couldn't reset password`})
+    return
+  }
+  res.status(200).json({success:'updated password sucessfully'})
+})
+
+app.listen(process.env.PORT, (err) => {
   if(err) {
     console.log(`error in server setup: ${err}`)
   }
