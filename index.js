@@ -1524,7 +1524,7 @@ app.post(HREF + '/Drive/create', async (req,res) => {
   res.status(200).json({success:'Drive created', id: driveId})
 })
 
-app.post('/Drive/delete', async (req,res) => {
+app.post(HREF + '/Drive/delete', async (req,res) => {
   let tokenResult = CheckForTokenAndRespond(req,res);
   if(!tokenResult.success) {
     res.status(500).json({"error":tokenResult.error})
@@ -1560,7 +1560,7 @@ app.post('/Drive/delete', async (req,res) => {
   res.status(200).json({success:'drive deleted'})
 })
 
-app.post('/startPasswordReset',async (req,res) => {
+app.post(HREF + '/startPasswordReset',async (req,res) => {
   let {email,username} = req.body
   if(email == null || username == null) {
     res.status(400).json({"error":"Required info missing"})
@@ -1602,7 +1602,7 @@ app.post('/startPasswordReset',async (req,res) => {
   }
 })
 
-app.post('/resetPassword',async (req,res) => {
+app.post(HREF + '/resetPassword',async (req,res) => {
   let {password,resetCode} = req.body
   if(password == null || resetCode == null) {
     res.status(400).json({"error":"Required info missing"})
