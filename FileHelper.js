@@ -9,7 +9,8 @@ module.exports = {
         var fileObjects = await Promise.all(files.map(async (x,i) => {
             let preview = null
             if(withPreview) {
-                if(x.includes('png') || x.includes('jpg')) {
+                let loweredName = x.toString().toLowerCase()
+                if(loweredName.includes('.png') || loweredName.includes('.jpg' || loweredName.includes('.jpeg'))) {
                     preview = await fs.readFileSync(`${drive}/${x}`)
                     preview = await sharp(preview)
                     .resize({height:50,fit:'inside'})

@@ -1366,6 +1366,20 @@ app.get(HREF + '/notifications', async (req,res) => {
   return
 })
 
+app.post(HREF + '/directory/create', async (req,res) => {
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
+    res.status(500).json({"error":tokenResult.error})
+    return
+  }
+  var result = fileHelper.CreateDirectory(`users/${tokenResult.name}`)
+  if(!result) {
+    res.status(500).json({error:'Failed to create directory'})
+    return
+  }
+  res.status(200).json({success:'created directory'})
+})
+
 app.get(HREF + '/FileList', async (req,res) => {
   let {drive,size, page, withPreview} = req.query
   if(!drive) {
@@ -1406,8 +1420,6 @@ app.post(HREF + '/DeleteFile', async (req,res) => {
   var result = await fileHelper.DeleteFile(name,drive)
   res.status(200).json({success:result})
 })
-
-//TODO: test everything below this
 
 app.get(HREF + '/Drive', async (req,res) => {
   let tokenResult = CheckForTokenAndRespond(req,res);
