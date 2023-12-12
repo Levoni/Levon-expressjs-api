@@ -14,6 +14,7 @@ var Stratego = require("./Stratego.js")
 var fileHelper = require("./FileHelper.js")
 var mailHelper = require("./mailHelper.js")
 var md5 = require('md5')
+const bodyParser = require('body-parser')
 
 const corsOpts = {
   origin: '*',
@@ -30,9 +31,8 @@ const corsOpts = {
   ],
 };
 
-app.use(express.json({limit:'10mb'}),
-        cors(corsOpts))
-
+app.use(bodyParser.json({ limit: "10mb" }),cors(corsOpts)) // for parsing application/json
+app.use(bodyParser.urlencoded({ limit: "10mb", extended: true, parameterLimit: 50000 })) // for parsing application/x-www-form-urlencoded
 
 const CheckForTokenAndRespond = (req,res) => {
   if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
@@ -1389,7 +1389,6 @@ app.get(HREF + '/FileList', async (req,res) => {
   let pageNum = !page ? 0 : parseInt(page)
   let isPreview = withPreview=='false' ? false : true
   var files = await fileHelper.GetFiles(drive, sizeNum, pageNum * sizeNum,isPreview);
-  console.log("method done")
   res.status(200).json(files);
 })
 
