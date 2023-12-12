@@ -1312,7 +1312,6 @@ app.post(HREF + '/highscore/submit', async (req,res) => {
 app.get(HREF + '/notifications', async (req,res) => {
   let tokenResult = CheckForTokenAndRespond(req,res);
   if(!tokenResult.success) {
-    res.status(500).json({"error":tokenResult.error})
     return
   }
 
