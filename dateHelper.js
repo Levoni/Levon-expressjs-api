@@ -46,5 +46,20 @@ module.exports = {
             date.getUTCHours() + minutes / 60,
             date.getUTCMinutes() + minutes % 60 
         )
-    }
+    },
+    GetLocalYYYYMMDDhhmmss: (date) => {
+        var seconds = date.getSeconds().toString().padStart(2, "0");
+        var minutes = date.getMinutes().toString().padStart(2, "0");
+        var hour = date.getHours().toString().padStart(2, "0");
+        var day = date.getDate().toString().padStart(2, "0");
+        var month = (date.getMonth() + 1).toString().padStart(2, "0");
+        var year = date.getFullYear().toString().padStart(2, "0");
+        return `${year}-${month}-${day} ${hour}:${minutes}:${seconds}`
+    },
+    GetLocalYYYYMMDD: (date) => {
+        var day = date.getDate().toString().padStart(2, "0");
+        var month = (date.getMonth() + 1).toString().padStart(2, "0");
+        var year = date.getFullYear().toString().padStart(2, "0");   
+        return `${year}-${month}-${day}`
+    },
 }

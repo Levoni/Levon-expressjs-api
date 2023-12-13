@@ -1283,7 +1283,7 @@ app.post(HREF + '/highscore/submit', async (req,res) => {
     return
   }
   if((!getHighScoreResult.rows || getHighScoreResult.rows.length == 0) ||
-      dateHelper.GetYYYYMMDD(new Date(getHighScoreResult.rows[0].created_on + 'Z')) != dateHelper.GetYYYYMMDD(new Date()) ) {
+      dateHelper.GetLocalYYYYMMDD(new Date(getHighScoreResult.rows[0].created_on + 'Z')) != dateHelper.GetLocalYYYYMMDD(new Date()) ) {
     let insertSQL = `insert into high_scores(game,user_name,score,display_name) values(?,?,?,?)`
     let insertResult = await dbHelper.insert(insertSQL,[game,user.name,score,user.name],db)
     if(insertResult.err) {
