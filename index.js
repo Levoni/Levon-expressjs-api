@@ -303,9 +303,10 @@ app.post(HREF + '/user/update/email', async (req,res) => {
     res.status(400).json({"error":"Required update info missing"})
     return
   }
+  let loweredEmail = email.toLowerCase()
 
   let updateSQL = 'UPDATE user set email = ? where name = ?'
-  let updateResult = await dbHelper.update(updateSQL,[email, loweredName],db)
+  let updateResult = await dbHelper.update(updateSQL,[loweredEmail, loweredName],db)
   if(updateResult.err) {
     res.status(500).json({'error':'update failed'})
     return
@@ -1577,10 +1578,11 @@ app.post(HREF + '/startPasswordReset',async (req,res) => {
     res.status(400).json({"error":"Required info missing"})
     return
   }
+  let loweredEmail = email.toLowerCase();
 
   //Verify it is the right user
   let getUserSql = 'SELECT * from user where name = ? and email = ?'
-  let getUserResult = await dbHelper.select(getUserSql,[username,email],db)
+  let getUserResult = await dbHelper.select(getUserSql,[username,loweredEmail],db)
   if(getUserResult.err) {
     res.status(500).json({error:'error starting reset process'})
     return
@@ -1603,7 +1605,7 @@ app.post(HREF + '/startPasswordReset',async (req,res) => {
   }
 
   try{
-    result = await mailHelper.SendMail(email,resetCode)
+    result = await mailHelper.SendMail(loweredEmail,resetCode)
     res.status(200).json({})
     return
   } catch(ex) {
