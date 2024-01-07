@@ -31,8 +31,9 @@ const corsOpts = {
   ],
 };
 
-app.use(bodyParser.json({ limit: "10mb" }),cors(corsOpts)) // for parsing application/json
-app.use(bodyParser.urlencoded({ limit: "10mb", extended: true, parameterLimit: 50000 })) // for parsing application/x-www-form-urlencoded
+app.use(bodyParser.json({ limit: "50mb" }),cors(corsOpts)) // for parsing application/json
+app.use(bodyParser.urlencoded({ limit: "50mb", extended: true, parameterLimit: 100000 }),cors(corsOpts)) // for parsing application/x-www-form-urlencoded
+app.use(bodyParser.raw({  limit: '50mb',  inflate: true,  parameterLimit: 100000}))
 
 const CheckForTokenAndRespond = (req,res) => {
   if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
@@ -386,7 +387,7 @@ app.post(HREF + '/signup', async (req,res) => {
   var params = [loweredName, encodedpassword, 0, 0]
   let result = await dbHelper.insert(sql,params,db)
   if(result.err) {
-    if(err.errno == 19) {
+    if(result.err.errno == 19) {
       res.status(400).json({"error":'User already exists'})
       return
     } else {
@@ -395,7 +396,7 @@ app.post(HREF + '/signup', async (req,res) => {
     }
   }
   let insertSQL = `INSERT INTO user_notification_preferences(user_name) values(?)`
-  let insertResult = await dbHelper.insert(insertSQL[loweredName],db)
+  let insertResult = await dbHelper.insert(insertSQL,[loweredName],db)
   if(insertResult.err) {
     res.status(500).json({error:`Error when creating a new user's preferences`})
   }
@@ -1247,7 +1248,7 @@ app.get(HREF + '/highscore', async (req,res) => {
     endDate = dateHelper.GetYYYYMMDDhhmmss(d)
   }
 
-  let getSQL = `Select * from high_scores where game = ? and created_on < ? and created_on > ? order by score desc LIMIT ${limit ? limit : 10} OFFSET ${start ? start : 0}`
+  let getSQL = `select game,user_name,display_name, max(score) as 'score' from high_scores where game = ? and created_on < ? and created_on > ? group by game,user_name,display_name order by score desc LIMIT ${limit ? limit : 10} OFFSET ${start ? start : 0}`
   let getResult = await dbHelper.select(getSQL, [game,endDate,startDate], db)
   if(getResult.err) {
     res.status(500).json({'error':'Error getting data','data':[]})
