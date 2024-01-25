@@ -277,13 +277,13 @@ app.post(HREF + '/user/update/notificationPreference', async (req,res) => {
     return
   }
   var loweredName = tokenResult.name
-  let {daily_guess,tot_game} = req.body
-  if(daily_guess == null && tot_game != null) {
+  let {daily_guess,tot_game,request_preference} = req.body
+  if(daily_guess == null && tot_game != null && request_preference != null) {
     res.status(400).json({"error":"Required update info missing"})
     return
   }
-  let updateSQL = 'UPDATE user_notification_preference set daily_guess = ?, tot_game = ? where user_name = ?'
-  let updateResult = await dbHelper.update(updateSQL,[daily_guess, tot_game, loweredName],db)
+  let updateSQL = 'UPDATE user_notification_preference set daily_guess = ?, tot_game = ?, requests = ? where user_name = ?'
+  let updateResult = await dbHelper.update(updateSQL,[daily_guess, tot_game, request_preference, loweredName],db)
   if(updateResult.err) {
     res.status(500).json({'error':'update failed'})
     return
