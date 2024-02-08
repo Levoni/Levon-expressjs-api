@@ -396,7 +396,7 @@ app.post(HREF + '/signup', async (req,res) => {
       return
     }
   }
-  let insertSQL = `INSERT INTO user_notification_preferences(user_name) values(?)`
+  let insertSQL = `INSERT INTO user_notification_preference(user_name) values(?)`
   let insertResult = await dbHelper.insert(insertSQL,[loweredName],db)
   if(insertResult.err) {
     res.status(500).json({error:`Error when creating a new user's preferences`})
