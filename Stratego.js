@@ -8,7 +8,10 @@ module.exports = {
             state:'stopped',
             currentPlayer:0,
             messages:[],
-            lastMove:''
+            lastMove:'',
+            varients:{
+
+            }
         }
     },
 
@@ -35,44 +38,44 @@ module.exports = {
     createGraveyard: () => {
         let graveyard = []
         for(let i = 0;i < 1; i++) {
-            graveyard.push({owner:1,power:12})
-            graveyard.push({owner:2,power:12})
-            graveyard.push({owner:1,power:10})
-            graveyard.push({owner:2,power:10})
-            graveyard.push({owner:1,power:9})
-            graveyard.push({owner:2,power:9})
+            graveyard.push({owner:1,power:12,shown:false,returned:false})
+            graveyard.push({owner:2,power:12,shown:false,returned:false})
+            graveyard.push({owner:1,power:10,shown:false,returned:false})
+            graveyard.push({owner:2,power:10,shown:false,returned:false})
+            graveyard.push({owner:1,power:9,shown:false,returned:false})
+            graveyard.push({owner:2,power:9,shown:false,returned:false})
         }
         for(let i = 0;i < 6; i++) {
-            graveyard.push({owner:1,power:11})
-            graveyard.push({owner:2,power:11})
+            graveyard.push({owner:1,power:11,shown:false,returned:false})
+            graveyard.push({owner:2,power:11,shown:false,returned:false})
         }
         for(let i = 0;i < 2; i++) {
-            graveyard.push({owner:1,power:8})
-            graveyard.push({owner:2,power:8})
+            graveyard.push({owner:1,power:8,shown:false,returned:false})
+            graveyard.push({owner:2,power:8,shown:false,returned:false})
         }
         for(let i = 0;i < 3; i++) {
-            graveyard.push({owner:1,power:7})
-            graveyard.push({owner:2,power:7})
+            graveyard.push({owner:1,power:7,shown:false,returned:false})
+            graveyard.push({owner:2,power:7,shown:false,returned:false})
         }
         for(let i = 0;i < 4; i++) {
-            graveyard.push({owner:1,power:6})
-            graveyard.push({owner:2,power:6})
-            graveyard.push({owner:1,power:5})
-            graveyard.push({owner:2,power:5})
-            graveyard.push({owner:1,power:4})
-            graveyard.push({owner:2,power:4})
+            graveyard.push({owner:1,power:6,shown:false,returned:false})
+            graveyard.push({owner:2,power:6,shown:false,returned:false})
+            graveyard.push({owner:1,power:5,shown:false,returned:false})
+            graveyard.push({owner:2,power:5,shown:false,returned:false})
+            graveyard.push({owner:1,power:4,shown:false,returned:false})
+            graveyard.push({owner:2,power:4,shown:false,returned:false})
         }
         for(let i = 0;i < 5; i++) {
-            graveyard.push({owner:1,power:3})
-            graveyard.push({owner:2,power:3})
+            graveyard.push({owner:1,power:3,shown:false,returned:false})
+            graveyard.push({owner:2,power:3,shown:false,returned:false})
         }
         for(let i = 0;i < 8; i++) {
-            graveyard.push({owner:1,power:2})
-            graveyard.push({owner:2,power:2})
+            graveyard.push({owner:1,power:2,shown:false,returned:false})
+            graveyard.push({owner:2,power:2,shown:false,returned:false})
         }
         for(let i = 0;i < 1; i++) {
-            graveyard.push({owner:1,power:1})
-            graveyard.push({owner:2,power:1})
+            graveyard.push({owner:1,power:1,shown:false,returned:false})
+            graveyard.push({owner:2,power:1,shown:false,returned:false})
         }
         return graveyard
     },
@@ -124,6 +127,8 @@ module.exports = {
                 gameState.lastMove = `${data.xStart}${data.yStart},${data.x}${data.y}:${piece.owner},${piece.power}:`
                 returnCommands.push(`{"action":"movePiece","xStart":"${data.xStart}","yStart":"${data.yStart}","x":"${data.x}","y":"${data.y}"}`)
             } else {
+                piece.shown = true
+                endPiece.shown = true
                 if(piece.power == 1 && endPiece.power == 10) {
                     gameState.board[data.xStart][data.yStart].piece = null
                     gameState.board[data.x][data.y].piece = piece
@@ -153,7 +158,7 @@ module.exports = {
                 if(endPiece.power == 12) {
                     gameState.state = 'stopped'
                     let winSQL = `UPDATE tot_game set status = 'complete', winner = (select user_name from user_tot_game where player_num = ? and tot_id = ?) where id = ?`
-                    let winResult = await dbHelper.update(winSQL,[gameState.currentPlayer, gameState.game_id, gameState.game_id].db)
+                    let winResult = await dbHelper.update(winSQL,[gameState.currentPlayer, gameState.game_id, gameState.game_id], db)
                     if(winResult.err) {
                         return 'error'
                     }
@@ -175,7 +180,7 @@ module.exports = {
         }
 
         let updateSQL = `UPDATE tot_game set game_json = ?, current_player = ? where id = ?`
-        let updateResult = dbHelper.insert(updateSQL, [JSON.stringify(gameState), gameState.currentPlayer,gameState.game_id], db)
+        let updateResult = dbHelper.update(updateSQL, [JSON.stringify(gameState), gameState.currentPlayer,gameState.game_id], db)
         if(updateResult.err) {
             return 'error'
         }

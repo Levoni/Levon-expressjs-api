@@ -209,10 +209,10 @@ app.get(HREF + '/user/notification/preference', async (req,res) => {
       return
     }
     selectResult = await dbHelper.select(selectSQL,[loweredName],db)
-    res.status(200).json({success:'sucess',rows:selectResult.rows})
+    res.status(200).json({success:'success',rows:selectResult.rows})
     return;
   }
-  res.status(200).json({success:'sucess',rows:selectResult.rows})
+  res.status(200).json({success:'success',rows:selectResult.rows})
   return
 })
 
@@ -536,6 +536,35 @@ app.post(HREF + '/request_message/updateStatus', async (req,res) => {
   }
   res.status(200).json({'success':'Request status updated'})
   return
+})
+
+app.post(HREF + `/request/view_status/update`, async (req,res) => {
+  let tokenResult = CheckForTokenAndRespond(req,res);
+  if(!tokenResult.success) {
+    return
+  }
+
+  let {id, is_admin, include_messages} = req.body
+  if(is_admin == null || id == null || include_messages == null) {
+    res.status(400).json({"error":"Required update info missing"})
+    return
+  }
+
+  let loweredName = tokenResult.name.toLowerCase()
+  let userResult = await dbHelper.selectUser(loweredName,db)
+  if(userResult.err) {
+    return res.status(500).json({error:'Failed to update view status'})
+  }
+  let user = userResult.rows[0]
+  let admin = user.is_admin
+
+  let updateSql = `update requests set to_view = 0 where id = ? and to_view = ?`
+  let updateResult = await dbHelper.update(updateSql,[id,admin ? 2 : 1],db)
+  if(include_messages) {
+    let updateMessageSql = `update request_message set to_view = 0 where request_id = ? and to_view = ?`
+    let updateMessageResult = await dbHelper.update(updateMessageSql,[id, admin ? 2 : 1],db)
+  }
+  return res.status(200).json({success:'updated view status'})
 })
 
 app.get(HREF + '/list/:userName', async (req,res) => {
@@ -1069,8 +1098,8 @@ app.post(HREF + '/request/add', async (req,res) => {
     return
   }
 
-  let sql = 'INSERT INTO requests (type, message, user_name) values(?,?,?) RETURNING id'
-  let results = await dbHelper.insertAndGet(sql,[type,message,user_name],db);
+  let sql = 'INSERT INTO requests (type, message, user_name,to_view) values(?,?,?,?) RETURNING id'
+  let results = await dbHelper.insertAndGet(sql,[type,message,user_name,2],db); // to_view (2) = admin
   if(results.err) {
     res.status(500).json({'error':'Error creating request'})
     return
@@ -1091,8 +1120,14 @@ app.post(HREF + '/requestMessage/add', async (req,res) => {
     return
   }
 
-  let sql = 'INSERT INTO request_message (request_id, message, user_name) values(?,?,?)'
-  let results = await dbHelper.insert(sql,[id,message,user_name],db);
+  let userResult = await dbHelper.selectUser(user_name.toLowerCase(),db)
+  if(userResult.err) {
+    res.status(400).json({'error':'Error when finding user to make request'})
+  }
+  let isAdmin = userResult.rows.length == 0 ? false : userResult.rows[0].is_admin == 1
+
+  let sql = 'INSERT INTO request_message (request_id, message, user_name,to_view) values(?,?,?,?)'
+  let results = await dbHelper.insert(sql,[id,message,user_name,isAdmin ? 1:2],db); // to_view 1=user,2=admin
   if(results.err) {
     res.status(500).json({'error':'Error creating request message'})
     return
@@ -1334,7 +1369,8 @@ app.get(HREF + '/notifications', async (req,res) => {
     return
   }
   let NotificationList = []
-  let preferences = selectResult.rows[0]
+  let user = selectResult.rows[0]
+  let preferences = user
   if(preferences.daily_guess) {
     const lastGuessDate = new Date(preferences.last_daily_guess + 'Z')
     const currentDate = new Date()
@@ -1358,6 +1394,43 @@ app.get(HREF + '/notifications', async (req,res) => {
         NotificationList.push({type:'Tot game turn',message:`It is your turn in a ${element.type} game`,link:`/game/totGames/game?id=${element.tot_id}`})
       }
     });
+  }
+  if(preferences.requests) {
+    let requestSql = `select r.*, rm.to_view as 'message_to_view' from requests r left join request_message rm on r.id = rm.request_id where closed = 0`
+    if(!user.is_admin) {
+      requestSql += ` and r.user_name = '${userName}'`
+    }
+    let requestResults = await dbHelper.select(requestSql,[],db)
+    if(requestResults.err) {
+      res.status(500).json({'error':'error while getting notifications'})
+      return
+    }
+    let newRequestsToView = 0
+    let newRequestMessagesToView = 0
+    let viewedRequests = []
+    requestResults.rows.forEach(element => {
+      if(user.is_admin) {
+        if(element.to_view == 2 && !viewedRequests.includes(element.id)) {
+          newRequestsToView += 1
+          viewedRequests.push(element.id)
+        }
+        if(element.message_to_view == 2) {
+          newRequestMessagesToView += 1
+        }
+      } else {
+        if(element.to_view == 1 && !viewedRequests.includes(element.id)) {
+          newRequestsToView += 1
+          viewedRequests.push(element.id)
+        }
+        if(element.message_to_view == 1) {
+          newRequestMessagesToView += 1
+        }
+      }
+    })
+
+    if(newRequestsToView > 0 || newRequestMessagesToView > 0) {
+      NotificationList.push({type:'Requests',message:`${newRequestsToView} new Request(s) and ${newRequestMessagesToView} new Request Message(s) to view`, link: '/tools/requests'})
+    }
   }
   if(preferences.daily_quiz_results) {
     // let resultsSelect = ``
@@ -1579,17 +1652,19 @@ app.post(HREF + '/startPasswordReset',async (req,res) => {
     return
   }
   let loweredEmail = email.toLowerCase();
+  let loweredUserName = username.toLowerCase();
 
   //Verify it is the right user
   let getUserSql = 'SELECT * from user where name = ? and email = ?'
-  let getUserResult = await dbHelper.select(getUserSql,[username,loweredEmail],db)
+  let getUserResult = await dbHelper.select(getUserSql,[loweredUserName,loweredEmail],db)
   if(getUserResult.err) {
     res.status(500).json({error:'error starting reset process'})
     return
   }
   if(!getUserResult.rows || getUserResult.rows.length == 0) {
     //Send a success even though no email sent to protect privacy
-    res.status(200).json({success: 'Reset Password Email Sent'})
+    console.log('Could not find specified user and email to reset email')
+    res.status(200).json({success: 'Could not find specified user and email to reset email'})
     return
   }
 
@@ -1598,7 +1673,7 @@ app.post(HREF + '/startPasswordReset',async (req,res) => {
 
   //Insert reset
   let resetSQL = `Insert into reset (type,reset_code,user_name,valid_length) values(?,?,?,?)`
-  let resetResult = await dbHelper.insert(resetSQL,['password',resetCode,username,30],db)
+  let resetResult = await dbHelper.insert(resetSQL,['password',resetCode,loweredUserName,30],db)
   if(resetResult.err) {
     res.status(500).json({error:'error starting reset process'})
     return
@@ -1606,7 +1681,7 @@ app.post(HREF + '/startPasswordReset',async (req,res) => {
 
   try{
     result = await mailHelper.SendMail(loweredEmail,resetCode)
-    res.status(200).json({})
+    res.status(200).json({success:'Reset Email Sent, Please check spam folder'})
     return
   } catch(ex) {
     console.log(ex)
