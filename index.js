@@ -13,6 +13,7 @@ var TicTacToe = require("./TicTacToe.js")
 var Stratego = require("./Stratego.js")
 var fileHelper = require("./FileHelper.js")
 var mailHelper = require("./mailHelper.js")
+const { NumGenerator } = require('./generator')
 var md5 = require('md5')
 
 const corsOpts = {
@@ -31,46 +32,59 @@ const corsOpts = {
 };
 
 app.use(cors(corsOpts))
-app.use(express.json({limit: '160mb'})); //20 MB
-app.use(express.urlencoded({limit: '160mb',extended:true}));
-app.use(express.raw({limit: '160mb'}));
+app.use(express.json({ limit: '160mb' })); //20 MB
+app.use(express.urlencoded({ limit: '160mb', extended: true }));
+app.use(express.raw({ limit: '160mb' }));
 
-const CheckForTokenAndRespond = (req,res) => {
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"token was not provided"})
-    return {error:'token was not provided',success:false, name:''}
+const CheckForTokenAndRespond = (req, res) => {
+  if (!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
+    res.status(401).json({ "error": "token was not provided" })
+    return { error: 'token was not provided', success: false, name: '' }
   }
 
   var decodedToken
-  try{
+  try {
     decodedToken = jwt.verify(req.headers.authorization.split(' ')[1], secret)
-  } catch(error) {
-    res.status(401).json({"error":"auth token has expired"})
-    return {error:'auth token has expired',success:false, name:''}
+  } catch (error) {
+    res.status(401).json({ "error": "auth token has expired" })
+    return { error: 'auth token has expired', success: false, name: '' }
   }
   var loweredName = decodedToken.name
-  return {error:'',success:true, name:loweredName}
+  return { error: '', success: true, name: loweredName }
 }
+const CheckForToken = (req, res) => {
+  if (!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
+    return { error: 'token was not provided', success: false, name: '' }
+  }
 
+  var decodedToken
+  try {
+    decodedToken = jwt.verify(req.headers.authorization.split(' ')[1], secret)
+  } catch (error) {
+    return { error: 'auth token has expired', success: false, name: '' }
+  }
+  var loweredName = decodedToken.name
+  return { error: '', success: true, name: loweredName }
+}
 
 app.get(HREF + '/', (req, res) => {
   res.send('Hello World!')
 })
 
-app.post(HREF + '/auth/accessToken', (req,res) => {
-  let {code} = req.body
-  if(!code) {
-    res.status(400).json({"error":"body is missing code"})
+app.post(HREF + '/auth/accessToken', (req, res) => {
+  let { code } = req.body
+  if (!code) {
+    res.status(400).json({ "error": "body is missing code" })
     return
   }
 
   fetch('https://oauth2.googleapis.com/token?' +
-  `redirect_uri=http://localhost:3000/auth/google` +
-  `&code=${code}` +
-  `&client_id=` +
-  `&client_secret=` +
-  `&scope=&grant_type=authorization_code`,{
-    method:'POST'
+    `redirect_uri=http://localhost:3000/auth/google` +
+    `&code=${code}` +
+    `&client_id=` +
+    `&client_secret=` +
+    `&scope=&grant_type=authorization_code`, {
+    method: 'POST'
   }).then((data) => {
     data.json().then((jsonData) => {
       res.status(200).json(jsonData)
@@ -78,53 +92,53 @@ app.post(HREF + '/auth/accessToken', (req,res) => {
   })
 })
 
-app.post(HREF + '/auth/user/accessToken', (req,res) => {
-  let {code} = req.body
-  if(!code) {
-    res.status(400).json({"error":"body is missing code"})
+app.post(HREF + '/auth/user/accessToken', (req, res) => {
+  let { code } = req.body
+  if (!code) {
+    res.status(400).json({ "error": "body is missing code" })
     return
   }
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"auth token was not provided"})
+  if (!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
+    res.status(401).json({ "error": "auth token was not provided" })
     return
   }
   var decodedToken
-  try{
+  try {
     decodedToken = jwt.verify(req.headers.authorization.split(' ')[1], secret)
-  } catch(error) {
-    res.status(401).json({"error":"auth token has expired"})
+  } catch (error) {
+    res.status(401).json({ "error": "auth token has expired" })
     return
   }
   var loweredName = decodedToken.name
 
   fetch('https://oauth2.googleapis.com/token?' +
-  `redirect_uri=http://localhost:3000/auth/google` +
-  `&code=${code}` +
-  `&client_id=` +
-  `&client_secret=` +
-  `&scope=&grant_type=authorization_code`,{
-    method:'POST'
+    `redirect_uri=http://localhost:3000/auth/google` +
+    `&code=${code}` +
+    `&client_id=` +
+    `&client_secret=` +
+    `&scope=&grant_type=authorization_code`, {
+    method: 'POST'
   }).then((data) => {
     data.json().then((jsonData) => {
-      dbHelper.update('update user set refresh_token=? where name=?',[jsonData.refresh_token,loweredName],db)
+      dbHelper.update('update user set refresh_token=? where name=?', [jsonData.refresh_token, loweredName], db)
       res.status(200).json(jsonData)
     })
   })
 })
 
-app.post(HREF + '/auth/refreshToken', (req,res) => {
-  let {token} = req.body
-  if(!token) {
-    res.status(400).json({"error":"body is missing code"})
+app.post(HREF + '/auth/refreshToken', (req, res) => {
+  let { token } = req.body
+  if (!token) {
+    res.status(400).json({ "error": "body is missing code" })
     return
   }
 
   fetch('https://oauth2.googleapis.com/token' +
-  '?client_secret=' +
-  '&grant_type=refresh_token' +
-  `&refresh_token=${token}` +
-  '&client_id=',{
-    method:'POST'
+    '?client_secret=' +
+    '&grant_type=refresh_token' +
+    `&refresh_token=${token}` +
+    '&client_id=', {
+    method: 'POST'
   }).then((data) => {
     data.json().then((jsonData) => {
       res.status(200).json(jsonData)
@@ -132,26 +146,26 @@ app.post(HREF + '/auth/refreshToken', (req,res) => {
   })
 })
 
-app.post(HREF + '/auth/user/refreshToken', async (req,res) => {
-  let {name, password} = req.body
-  if(!name || !password) {
-    res.status(400).json({"error":"sign up information not supplied in body"})
+app.post(HREF + '/auth/user/refreshToken', async (req, res) => {
+  let { name, password } = req.body
+  if (!name || !password) {
+    res.status(400).json({ "error": "sign up information not supplied in body" })
     return
   }
   var loweredName = name.toLowerCase()
   var encodedpassword = md5(password)
-  var result = await dbHelper.select(`SELECT * from user where name = ? and secret = ?`,[loweredName,encodedpassword],db)
-  if(result.err) { //TODO: check if this works
-    res.status(400).json({"error":"No User exists for that name and password"})
+  var result = await dbHelper.select(`SELECT * from user where name = ? and secret = ?`, [loweredName, encodedpassword], db)
+  if (result.err) { //TODO: check if this works
+    res.status(400).json({ "error": "No User exists for that name and password" })
     return
   }
 
   fetch(HREF + 'https://oauth2.googleapis.com/token' +
-  '?client_secret=' +
-  '&grant_type=refresh_token' +
-  `&refresh_token=${user[0].refresh_token}` +
-  '&client_id=',{
-    method:'POST'
+    '?client_secret=' +
+    '&grant_type=refresh_token' +
+    `&refresh_token=${user[0].refresh_token}` +
+    '&client_id=', {
+    method: 'POST'
   }).then((data) => {
     data.json().then((jsonData) => {
       res.status(200).json(jsonData)
@@ -159,165 +173,165 @@ app.post(HREF + '/auth/user/refreshToken', async (req,res) => {
   })
 })
 
-app.get(HREF + '/user', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.get(HREF + '/user', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
   var loweredName = tokenResult.name
 
   var result = await dbHelper.select('SELECT name, guesses, correct_guesses, points, last_daily_guess, is_admin, public, email from user where name = ? LIMIT 1', [loweredName], db)
-  if(result.err) {
-    res.status(400).json({"error":"No User with this name exists"})
+  if (result.err) {
+    res.status(400).json({ "error": "No User with this name exists" })
   } else {
     res.status(200).json(result.rows[0])
   }
 })
 
-app.get(HREF + '/users', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.get(HREF + '/users', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
 
   var result = await dbHelper.select('SELECT name, guesses, correct_guesses, points, last_daily_guess, is_admin, public from user where public = 1', [], db)
-  if(result.err) {
-    res.status(400).json({"error":"No User with this name exists"})
+  if (result.err) {
+    res.status(400).json({ "error": "No User with this name exists" })
   } else {
     res.status(200).json(result.rows)
   }
 })
 
-app.get(HREF + '/user/notification/preference', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.get(HREF + '/user/notification/preference', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
   var loweredName = tokenResult.name
 
   let selectSQL = `select * from user_notification_preference where user_name = ?`
-  let selectResult = await dbHelper.select(selectSQL,[loweredName],db)
-  if(selectResult.err) {
-    res.status(500).json({error:'error while getting notification preferences'})
+  let selectResult = await dbHelper.select(selectSQL, [loweredName], db)
+  if (selectResult.err) {
+    res.status(500).json({ error: 'error while getting notification preferences' })
     return
   }
-  if(selectResult.rows.length == 0) {
+  if (selectResult.rows.length == 0) {
     let insertSQL = `INSERT INTO user_notification_preference(user_name) values(?)`
-    let insertResult = await dbHelper.insert(insertSQL,[loweredName],db)
-    if(insertResult.err) {
-      res.status(500).json({error:'error while getting notification preferences'})
+    let insertResult = await dbHelper.insert(insertSQL, [loweredName], db)
+    if (insertResult.err) {
+      res.status(500).json({ error: 'error while getting notification preferences' })
       return
     }
-    selectResult = await dbHelper.select(selectSQL,[loweredName],db)
-    res.status(200).json({success:'success',rows:selectResult.rows})
+    selectResult = await dbHelper.select(selectSQL, [loweredName], db)
+    res.status(200).json({ success: 'success', rows: selectResult.rows })
     return;
   }
-  res.status(200).json({success:'success',rows:selectResult.rows})
+  res.status(200).json({ success: 'success', rows: selectResult.rows })
   return
 })
 
-app.get(HREF + '/numberWins', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.get(HREF + '/numberWins', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
 
   let sql = 'SELECT * from Numbers where winner is not null order by id desc limit 10'
   let numberResults = await dbHelper.select(sql, [], db)
-  if(numberResults.err) {
-    res.status(500).json({"error":"error while getting numbers"})
+  if (numberResults.err) {
+    res.status(500).json({ "error": "error while getting numbers" })
     return
   }
   return res.status(200).json(numberResults.rows)
 })
 
-app.get(HREF + '/info/guess/user', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.get(HREF + '/info/guess/user', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
   var loweredName = tokenResult.name
 
   var userResult = await dbHelper.selectUser(loweredName, db)
-  if(userResult.err) {
-    res.status(400).json({"error":"No user with that name"})
+  if (userResult.err) {
+    res.status(400).json({ "error": "No user with that name" })
     return
   }
   var currentNumber = await dbHelper.selectCurrentNumber(db)
   var userGuessInfo = await dbHelper.select('Select * from guess where name = ? and guess_id = ?', [userResult.rows[0].name, currentNumber.rows[0].id], db)
-  res.status(200).json({"guessInfo":userGuessInfo.rows, "numberId":currentNumber.rows[0].id})
+  res.status(200).json({ "guessInfo": userGuessInfo.rows, "numberId": currentNumber.rows[0].id })
   return
 })
 
-app.post(HREF + '/user/update/social', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.post(HREF + '/user/update/social', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
   var loweredName = tokenResult.name
 
-  let {public} = req.body
-  if(public == null) {
-    res.status(400).json({"error":"Required update info missing"})
+  let { public } = req.body
+  if (public == null) {
+    res.status(400).json({ "error": "Required update info missing" })
     return
   }
 
   let updateSQL = 'UPDATE user set public = ? where name = ?'
-  let updateResult = await dbHelper.update(updateSQL,[public, loweredName],db)
-  if(updateResult.err) {
-    res.status(500).json({'error':'update failed'})
+  let updateResult = await dbHelper.update(updateSQL, [public, loweredName], db)
+  if (updateResult.err) {
+    res.status(500).json({ 'error': 'update failed' })
     return
   }
-  res.status(200).json({'success':'user updated'})
+  res.status(200).json({ 'success': 'user updated' })
 })
 
-app.post(HREF + '/user/update/notificationPreference', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.post(HREF + '/user/update/notificationPreference', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
   var loweredName = tokenResult.name
-  let {daily_guess,tot_game,request_preference} = req.body
-  if(daily_guess == null && tot_game != null && request_preference != null) {
-    res.status(400).json({"error":"Required update info missing"})
+  let { daily_guess, tot_game, request_preference } = req.body
+  if (daily_guess == null && tot_game != null && request_preference != null) {
+    res.status(400).json({ "error": "Required update info missing" })
     return
   }
   let updateSQL = 'UPDATE user_notification_preference set daily_guess = ?, tot_game = ?, requests = ? where user_name = ?'
-  let updateResult = await dbHelper.update(updateSQL,[daily_guess, tot_game, request_preference, loweredName],db)
-  if(updateResult.err) {
-    res.status(500).json({'error':'update failed'})
+  let updateResult = await dbHelper.update(updateSQL, [daily_guess, tot_game, request_preference, loweredName], db)
+  if (updateResult.err) {
+    res.status(500).json({ 'error': 'update failed' })
     return
   }
-  res.status(200).json({'success':'user updated'})
+  res.status(200).json({ 'success': 'user updated' })
 })
 
-app.post(HREF + '/user/update/email', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.post(HREF + '/user/update/email', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
   var loweredName = tokenResult.name
 
-  let {email} = req.body
-  if(!email) {
-    res.status(400).json({"error":"Required update info missing"})
+  let { email } = req.body
+  if (!email) {
+    res.status(400).json({ "error": "Required update info missing" })
     return
   }
   let loweredEmail = email.toLowerCase()
 
   let updateSQL = 'UPDATE user set email = ? where name = ?'
-  let updateResult = await dbHelper.update(updateSQL,[loweredEmail, loweredName],db)
-  if(updateResult.err) {
-    res.status(500).json({'error':'update failed'})
+  let updateResult = await dbHelper.update(updateSQL, [loweredEmail, loweredName], db)
+  if (updateResult.err) {
+    res.status(500).json({ 'error': 'update failed' })
     return
   }
-  res.status(200).json({'success':'user updated'})
+  res.status(200).json({ 'success': 'user updated' })
 })
 
 //TODO: verify this method doesn't allow multiple subimsions form frontend
-app.post(HREF + '/guess/:number', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.post(HREF + '/guess/:number', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
 
@@ -325,109 +339,109 @@ app.post(HREF + '/guess/:number', async (req,res) => {
 
   var guess = req.params['number']
 
-  const userResults = await dbHelper.select('SELECT * from user where name = ? LIMIT 1',[loweredName],db)
+  const userResults = await dbHelper.select('SELECT * from user where name = ? LIMIT 1', [loweredName], db)
 
-    if(userResults.err) {
-      res.status(400).json({"error":"No User with this name"})
-    } else {
-      const user = userResults.rows[0]
-      const lastGuessDate = new Date(user.last_daily_guess + 'Z')
-      const currentDate = new Date()
-      if(lastGuessDate.getUTCDate() == currentDate.getUTCDate() &&
-        lastGuessDate.getUTCMonth() == currentDate.getUTCMonth()) {
-          res.status(200).json({"result":false,"Message":"You have already guessed for today"})
-          return
-      }
+  if (userResults.err) {
+    res.status(400).json({ "error": "No User with this name" })
+  } else {
+    const user = userResults.rows[0]
+    const lastGuessDate = new Date(user.last_daily_guess + 'Z')
+    const currentDate = new Date()
+    if (lastGuessDate.getUTCDate() == currentDate.getUTCDate() &&
+      lastGuessDate.getUTCMonth() == currentDate.getUTCMonth()) {
+      res.status(200).json({ "result": false, "Message": "You have already guessed for today" })
+      return
+    }
 
-      const numResults = await dbHelper.select('SELECT * from Numbers order by id DESC LIMIT 1',[],db)
-      if(numResults.err) {
-        res.status(200).json({"result":false,"Message":"No number available to guess yet" })
-        return
-      }
-      if(numResults.rows[0]['winner']) {
-        res.status(200).json({"result":false,"Message":"Number was already guessed" })
-        return
-      }
-      if(guess == numResults.rows[0]['Number']) {
-        dbHelper.update(`Update user set correct_guesses=?,guesses=?,last_daily_guess=?,points=? where name=?`,
+    const numResults = await dbHelper.select('SELECT * from Numbers order by id DESC LIMIT 1', [], db)
+    if (numResults.err) {
+      res.status(200).json({ "result": false, "Message": "No number available to guess yet" })
+      return
+    }
+    if (numResults.rows[0]['winner']) {
+      res.status(200).json({ "result": false, "Message": "Number was already guessed" })
+      return
+    }
+    if (guess == numResults.rows[0]['Number']) {
+      dbHelper.update(`Update user set correct_guesses=?,guesses=?,last_daily_guess=?,points=? where name=?`,
         [user.correct_guesses + 1, user.guesses + 1, dateHelper.GetYYYYMMDDhhmmss(new Date()), user.points + 1000, user.name],
         db)
-        dbHelper.update(`Update Numbers set winner=? where id=?`,[user.name, numResults.rows[0].id], db)
-        dbHelper.insert('INSERT into guess (guess_id,name,guess,result) values(?,?,?,?)',[numResults.rows[0].id,user.name,guess,'Congratulations! You guessed correcttly'],db)
-        let randomNumber = Math.floor(Math.random() * 100)
-        dbHelper.insert('INSERT into Numbers (Number) values (?)',[randomNumber],db)
-        res.status(200).json({"result":true,"Message":"Congratulations! You guessed correcttly"})
-        return
-      } else {
-        dbHelper.update(`Update user set guesses=?,last_daily_guess=? where name=?`,
+      dbHelper.update(`Update Numbers set winner=? where id=?`, [user.name, numResults.rows[0].id], db)
+      dbHelper.insert('INSERT into guess (guess_id,name,guess,result) values(?,?,?,?)', [numResults.rows[0].id, user.name, guess, 'Congratulations! You guessed correcttly'], db)
+      let randomNumber = Math.floor(Math.random() * 100)
+      dbHelper.insert('INSERT into Numbers (Number) values (?)', [randomNumber], db)
+      res.status(200).json({ "result": true, "Message": "Congratulations! You guessed correcttly" })
+      return
+    } else {
+      dbHelper.update(`Update user set guesses=?,last_daily_guess=? where name=?`,
         [user.guesses + 1, dateHelper.GetYYYYMMDDhhmmss(new Date()), user.name],
         db)
 
-        if(guess < numResults.rows[0]['Number']) {
-          dbHelper.insert('INSERT into guess (guess_id,name,guess,result) values(?,?,?,?)',[numResults.rows[0].id,user.name,guess,'Incorrect, too low'],db)
-          res.status(200).json({"result":false,"Message":"Incorrect, too low"})
-        } else {
-          dbHelper.insert('INSERT into guess (guess_id,name,guess,result) values(?,?,?,?)',[numResults.rows[0].id,user.name,guess,'Incorrect, too high'],db)
-          res.status(200).json({"result":false,"Message":"Incorrect, too high"})
-        }
-        return
+      if (guess < numResults.rows[0]['Number']) {
+        dbHelper.insert('INSERT into guess (guess_id,name,guess,result) values(?,?,?,?)', [numResults.rows[0].id, user.name, guess, 'Incorrect, too low'], db)
+        res.status(200).json({ "result": false, "Message": "Incorrect, too low" })
+      } else {
+        dbHelper.insert('INSERT into guess (guess_id,name,guess,result) values(?,?,?,?)', [numResults.rows[0].id, user.name, guess, 'Incorrect, too high'], db)
+        res.status(200).json({ "result": false, "Message": "Incorrect, too high" })
       }
+      return
     }
+  }
 
 })
 
-app.post(HREF + '/signup', async (req,res) => {
-  let {name, password} = req.body
-  if(!name || !password) {
-    res.status(400).json({"error":"Sign up information not supplied in body"})
+app.post(HREF + '/signup', async (req, res) => {
+  let { name, password } = req.body
+  if (!name || !password) {
+    res.status(400).json({ "error": "Sign up information not supplied in body" })
     return
   }
   var loweredName = name.toLowerCase()
   var encodedpassword = md5(password)
   var sql = 'INSERT INTO user (name, secret, guesses, correct_guesses, is_admin) VALUES (?,?,?,?, false)'
   var params = [loweredName, encodedpassword, 0, 0]
-  let result = await dbHelper.insert(sql,params,db)
-  if(result.err) {
-    if(result.err.errno == 19) {
-      res.status(400).json({"error":'User already exists'})
+  let result = await dbHelper.insert(sql, params, db)
+  if (result.err) {
+    if (result.err.errno == 19) {
+      res.status(400).json({ "error": 'User already exists' })
       return
     } else {
-      res.status(500).json({"error":'Error when creating a new user'})
+      res.status(500).json({ "error": 'Error when creating a new user' })
       return
     }
   }
   let insertSQL = `INSERT INTO user_notification_preference(user_name) values(?)`
-  let insertResult = await dbHelper.insert(insertSQL,[loweredName],db)
-  if(insertResult.err) {
-    res.status(500).json({error:`Error when creating a new user's preferences`})
+  let insertResult = await dbHelper.insert(insertSQL, [loweredName], db)
+  if (insertResult.err) {
+    res.status(500).json({ error: `Error when creating a new user's preferences` })
   }
-  let token = jwt.sign({name: loweredName}, secret, {expiresIn: "5h"})
-  res.status(200).json({"token":token})
+  let token = jwt.sign({ name: loweredName }, secret, { expiresIn: "5h" })
+  res.status(200).json({ "token": token })
 })
 
-app.post(HREF + '/login', async (req,res) => {
-  let {name, password} = req.body
-  if(!name || !password) {
-    res.status(400).json({"error":"Login information not supplied in body"})
+app.post(HREF + '/login', async (req, res) => {
+  let { name, password } = req.body
+  if (!name || !password) {
+    res.status(400).json({ "error": "Login information not supplied in body" })
     return
   }
 
   let loweredName = name.toLowerCase()
   var encodedpassword = md5(password)
-  let selectResult = await dbHelper.select('SELECT * from user where name = ? and secret = ? LIMIT 1', [loweredName, encodedpassword],db)
-  if(!selectResult.rows || selectResult.rows.length == 0) {
-    res.status(400).json({"error":"User does not exist with specified username and password"})
+  let selectResult = await dbHelper.select('SELECT * from user where name = ? and secret = ? LIMIT 1', [loweredName, encodedpassword], db)
+  if (!selectResult.rows || selectResult.rows.length == 0) {
+    res.status(400).json({ "error": "User does not exist with specified username and password" })
     return
   } else {
-    let token = jwt.sign({name: selectResult.rows[0].name}, secret, {expiresIn: "5h"})
-    res.status(200).json({"token":token})
+    let token = jwt.sign({ name: selectResult.rows[0].name }, secret, { expiresIn: "5h" })
+    res.status(200).json({ "token": token })
     return
   }
 })
 
-app.get(HREF + '/game', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.get(HREF + '/game', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
 
@@ -436,9 +450,9 @@ app.get(HREF + '/game', async (req,res) => {
   return res.status(200).json(gameResults.rows)
 })
 
-app.get(HREF + '/site', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.get(HREF + '/site', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
 
@@ -447,15 +461,15 @@ app.get(HREF + '/site', async (req,res) => {
   return res.status(200).json(siteResults.rows)
 })
 
-app.get(HREF + '/request', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.get(HREF + '/request', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
 
   let params = req.query
   let getclosedsql = ''
-  if(params && params.closed) {
+  if (params && params.closed) {
     getclosedsql = ` where closed = ${params.closed}`
   }
 
@@ -464,21 +478,21 @@ app.get(HREF + '/request', async (req,res) => {
   return res.status(200).json(selectResults.rows)
 })
 
-app.get(HREF + '/request/:userName', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.get(HREF + '/request/:userName', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
 
-  if(!req.params['userName']) {
-    res.status(400).json({'error':'messing required info'})
+  if (!req.params['userName']) {
+    res.status(400).json({ 'error': 'messing required info' })
     return
   }
   var userName = req.params['userName']
 
   let params = req.query
   let getclosedsql = ''
-  if(params && params.closed) {
+  if (params && params.closed) {
     getclosedsql = ` and closed = ${params.closed}`
   }
 
@@ -487,9 +501,9 @@ app.get(HREF + '/request/:userName', async (req,res) => {
   return res.status(200).json(selectResults.rows)
 })
 
-app.get(HREF + '/request_messages', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.get(HREF + '/request_messages', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
 
@@ -498,14 +512,14 @@ app.get(HREF + '/request_messages', async (req,res) => {
   return res.status(200).json(selectResults.rows)
 })
 
-app.get(HREF + '/request_messages/:id', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.get(HREF + '/request_messages/:id', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
 
-  if(!req.params['id']) {
-    res.status(400).json({'error':'messing required info'})
+  if (!req.params['id']) {
+    res.status(400).json({ 'error': 'messing required info' })
     return
   }
 
@@ -516,65 +530,65 @@ app.get(HREF + '/request_messages/:id', async (req,res) => {
   return res.status(200).json(selectResults.rows)
 })
 
-app.post(HREF + '/request_message/updateStatus', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.post(HREF + '/request_message/updateStatus', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
 
-  let {closed, id} = req.body
-  if(closed == null, id == null) {
-    res.status(400).json({"error":"Required update info missing"})
+  let { closed, id } = req.body
+  if (closed == null, id == null) {
+    res.status(400).json({ "error": "Required update info missing" })
     return
   }
 
   let sql = 'UPDATE requests set closed = ? where id=?'
-  let results = await dbHelper.update(sql,[closed,id],db);
-  if(results.err) {
-    res.status(500).json({'error':'Error updating request status'})
+  let results = await dbHelper.update(sql, [closed, id], db);
+  if (results.err) {
+    res.status(500).json({ 'error': 'Error updating request status' })
     return
   }
-  res.status(200).json({'success':'Request status updated'})
+  res.status(200).json({ 'success': 'Request status updated' })
   return
 })
 
-app.post(HREF + `/request/view_status/update`, async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.post(HREF + `/request/view_status/update`, async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
 
-  let {id, is_admin, include_messages} = req.body
-  if(is_admin == null || id == null || include_messages == null) {
-    res.status(400).json({"error":"Required update info missing"})
+  let { id, is_admin, include_messages } = req.body
+  if (is_admin == null || id == null || include_messages == null) {
+    res.status(400).json({ "error": "Required update info missing" })
     return
   }
 
   let loweredName = tokenResult.name.toLowerCase()
-  let userResult = await dbHelper.selectUser(loweredName,db)
-  if(userResult.err) {
-    return res.status(500).json({error:'Failed to update view status'})
+  let userResult = await dbHelper.selectUser(loweredName, db)
+  if (userResult.err) {
+    return res.status(500).json({ error: 'Failed to update view status' })
   }
   let user = userResult.rows[0]
   let admin = user.is_admin
 
   let updateSql = `update requests set to_view = 0 where id = ? and to_view = ?`
-  let updateResult = await dbHelper.update(updateSql,[id,admin ? 2 : 1],db)
-  if(include_messages) {
+  let updateResult = await dbHelper.update(updateSql, [id, admin ? 2 : 1], db)
+  if (include_messages) {
     let updateMessageSql = `update request_message set to_view = 0 where request_id = ? and to_view = ?`
-    let updateMessageResult = await dbHelper.update(updateMessageSql,[id, admin ? 2 : 1],db)
+    let updateMessageResult = await dbHelper.update(updateMessageSql, [id, admin ? 2 : 1], db)
   }
-  return res.status(200).json({success:'updated view status'})
+  return res.status(200).json({ success: 'updated view status' })
 })
 
-app.get(HREF + '/list/:userName', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.get(HREF + '/list/:userName', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
 
-  if(!req.params['userName']) {
-    res.status(400).json({'error':'messing required info'})
+  if (!req.params['userName']) {
+    res.status(400).json({ 'error': 'messing required info' })
     return
   }
   var userName = req.params['userName']
@@ -584,48 +598,49 @@ app.get(HREF + '/list/:userName', async (req,res) => {
   return res.status(200).json(selectResults.rows)
 })
 
-app.get(HREF + '/list/quickview/:id', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.get(HREF + '/list/quickview/:id', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
 
-  if(!req.params['id']) {
-    res.status(400).json({'error':'messing required info'})
+  if (!req.params['id']) {
+    res.status(400).json({ 'error': 'messing required info' })
     return
   }
   var id = req.params['id']
 
   let sql = `SELECT l.id,name,type,is_template,created_date, user_name, is_owner from list l join user_list_link ull on l.id == ull.list_id where l.id = ?`
   let selectResults = await dbHelper.select(sql, [id], db)
-  if(selectResults.err) {
-    res.status(500).json({'error':'failed to get data'})
+  if (selectResults.err) {
+    res.status(500).json({ 'error': 'failed to get data' })
     return
   } else {
 
-    let data = selectResults.rows.reduce((accumulator,currentValue) => {
-      if(accumulator.get(currentValue.id) == undefined) {
+    let data = selectResults.rows.reduce((accumulator, currentValue) => {
+      if (accumulator.get(currentValue.id) == undefined) {
         accumulator.set(currentValue.id, {
-          id:currentValue.id,
-          name:currentValue.name,
-          type:currentValue.type,
-          is_template:currentValue.is_template,
-          created_date:currentValue.created_date,
-          user_names:[currentValue.user_name],
-          items:[]})
+          id: currentValue.id,
+          name: currentValue.name,
+          type: currentValue.type,
+          is_template: currentValue.is_template,
+          created_date: currentValue.created_date,
+          user_names: [currentValue.user_name],
+          items: []
+        })
         return accumulator;
       } else {
         let value = accumulator.get(currentValue.id)
         value.user_names = [...value.user_names, currentValue.user_name]
-        accumulator.set(currentValue.id,value)
+        accumulator.set(currentValue.id, value)
         return accumulator
       }
-    },new Map())
+    }, new Map())
     data = data.get(parseInt(id))
 
-    if(data) {
+    if (data) {
       let itemSql = 'SELECT * from list_item where list_id = ?'
-      let itemData = await dbHelper.select(itemSql,[id],db)
+      let itemData = await dbHelper.select(itemSql, [id], db)
       data.items = itemData.rows
     }
     res.status(200).json(data)
@@ -633,42 +648,42 @@ app.get(HREF + '/list/quickview/:id', async (req,res) => {
   }
 })
 
-app.get(HREF + '/userSiteLink', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.get(HREF + '/userSiteLink', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
 
   let params = req.query
   console.log(params)
-  if(params) {
+  if (params) {
     let whereClauses = []
     // if(params.date) {
     //   whereClauses.push(`site_day_date = '${params.date}'`)
     // }
-    if(params.site) {
+    if (params.site) {
       whereClauses.push(`daily_site_name = '${params.site}'`)
     }
-    if(params.userName) {
+    if (params.userName) {
       whereClauses.push(`user_name = '${params.userName}'`)
     }
-    if(params.spanDuration && params.span) {
+    if (params.spanDuration && params.span) {
       let startDate = params.date ? new Date(params.date) : new Date()
       whereClauses.push(`site_day_date <= '${dateHelper.GetYYYYMMDD(startDate)}'`)
-      if(params.span == 'daily') {
-        let dateObject = dateHelper.SubtractDays(startDate,1 * params.spanDuration)
+      if (params.span == 'daily') {
+        let dateObject = dateHelper.SubtractDays(startDate, 1 * params.spanDuration)
         whereClauses.push(`site_day_date > '${dateHelper.GetYYYYMMDD(dateObject)}'`)
       }
-      if(params.span == 'weekly') {
-        let dateObject = dateHelper.SubtractDays(startDate,7 * params.spanDuration)
+      if (params.span == 'weekly') {
+        let dateObject = dateHelper.SubtractDays(startDate, 7 * params.spanDuration)
         whereClauses.push(`site_day_date > '${dateHelper.GetYYYYMMDD(dateObject)}'`)
       }
-      if(params.span == 'monthly') {
-        let dateObject = dateHelper.SubtractMonths(startDate,1 * params.spanDuration)
+      if (params.span == 'monthly') {
+        let dateObject = dateHelper.SubtractMonths(startDate, 1 * params.spanDuration)
         whereClauses.push(`site_day_date > '${dateHelper.GetYYYYMMDD(dateObject)}'`)
       }
-      if(params.span == 'yearly') {
-        let dateObject = dateHelper.SubtractMonths(startDate,12 * params.spanDuration)
+      if (params.span == 'yearly') {
+        let dateObject = dateHelper.SubtractMonths(startDate, 12 * params.spanDuration)
         whereClauses.push(`site_day_date > '${dateHelper.GetYYYYMMDD(dateObject)}'`)
       }
 
@@ -676,10 +691,10 @@ app.get(HREF + '/userSiteLink', async (req,res) => {
 
 
     var whereString = '';
-    if(whereClauses.length > 0) {
+    if (whereClauses.length > 0) {
       whereString = ' where '
       for (let i = 0; i < whereClauses.length; i++) {
-        if(i != 0) {
+        if (i != 0) {
           whereString += ' and '
         }
         whereString += whereClauses[i]
@@ -688,9 +703,9 @@ app.get(HREF + '/userSiteLink', async (req,res) => {
 
     let selectSql = `SELECT * from user_site_link`
     console.log(selectSql + whereString)
-    let selectResult = await dbHelper.select(selectSql + whereString, [],db)
-    if(selectResult.err) {
-      res.status(500).json({"error":"server threw an error"})
+    let selectResult = await dbHelper.select(selectSql + whereString, [], db)
+    if (selectResult.err) {
+      res.status(500).json({ "error": "server threw an error" })
       return
     }
     res.status(200).json(selectResult.rows)
@@ -700,23 +715,23 @@ app.get(HREF + '/userSiteLink', async (req,res) => {
   return
 })
 
-app.get(HREF + '/totGame/overview/:userName', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.get(HREF + '/totGame/overview/:userName', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
 
   let user_name = req.params['userName']
-  if(!user_name) {
-    res.status(400).json({'error':'messing required info'})
+  if (!user_name) {
+    res.status(400).json({ 'error': 'messing required info' })
     return
   }
 
   var sqlTotGame = 'SELECT tg.*, utg.accepted, utg.is_creator from tot_game tg join user_tot_game utg on tg.id = utg.tot_id where utg.user_name = ?'
   var sqlTotGameParams = [user_name]
-  let linkResults = await dbHelper.select(sqlTotGame,sqlTotGameParams,db)
-  if(linkResults.err) {
-    res.status(500).json({'error':'Error getting Tot games'})
+  let linkResults = await dbHelper.select(sqlTotGame, sqlTotGameParams, db)
+  if (linkResults.err) {
+    res.status(500).json({ 'error': 'Error getting Tot games' })
     return
   }
 
@@ -724,71 +739,71 @@ app.get(HREF + '/totGame/overview/:userName', async (req,res) => {
   return
 })
 
-app.get(HREF + '/totGame/game', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.get(HREF + '/totGame/game', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
 
 
   let id = req.query['id']
   let userName = req.query['userName']
-  if(id == null || userName == null) {
-    res.status(400).json({'error':'messing required info'})
+  if (id == null || userName == null) {
+    res.status(400).json({ 'error': 'messing required info' })
     return
   }
 
   var sqlTotGame = 'SELECT tg.*, utg.accepted, utg.is_creator, utg.player_num from tot_game tg join user_tot_game utg on tg.id = utg.tot_id where tg.id = ? and utg.user_name = ?'
   var sqlTotGameParams = [id, userName]
-  let linkResults = await dbHelper.select(sqlTotGame,sqlTotGameParams,db)
-  if(linkResults.err) {
-    res.status(500).json({'error':'Error getting Tot games'})
+  let linkResults = await dbHelper.select(sqlTotGame, sqlTotGameParams, db)
+  if (linkResults.err) {
+    res.status(500).json({ 'error': 'Error getting Tot games' })
     return
   }
   res.status(200).json(linkResults.rows)
   return
 })
 
-app.post(HREF + '/totGame/add', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.post(HREF + '/totGame/add', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
 
-  let {type, challangedUser, creatorUser} = req.body
-  if(!type || !challangedUser || !creatorUser) {
-    res.status(400).json({"error":"Required Tot game info missing"})
+  let { type, challangedUser, creatorUser } = req.body
+  if (!type || !challangedUser || !creatorUser) {
+    res.status(400).json({ "error": "Required Tot game info missing" })
     return
   }
   let gameJson = type == 'tic-tac-toe' ? TicTacToe.CreateTicTacToeGameState() : Stratego.CreateStrategoGameState()
   //TODO: Also get and store id in game_json
   let insertSQL = `INSERT INTO tot_game(type,users,game_json,status,winner) values(?,?,?,'pending','') returning id`
-  let insertResult = await dbHelper.insertAndGet(insertSQL, [type,`'${creatorUser},${challangedUser}'`, JSON.stringify(gameJson)], db)
-  if(insertResult.err) {
-    res.status(500).json({'error':'Error creating tot game'})
+  let insertResult = await dbHelper.insertAndGet(insertSQL, [type, `'${creatorUser},${challangedUser}'`, JSON.stringify(gameJson)], db)
+  if (insertResult.err) {
+    res.status(500).json({ 'error': 'Error creating tot game' })
     return
   }
   let totGameId = insertResult.rows.id;
   let linkInsertSQL = `INSERT INTO user_tot_game(user_name,tot_id,accepted,is_creator,player_num) values(?,?,?,?,?)`
-  let linkOneResult = await dbHelper.insert(linkInsertSQL, [creatorUser,totGameId,true,true,1], db)
-  let linkTwoResult = await dbHelper.insert(linkInsertSQL, [challangedUser,totGameId,false,false,2], db)
-  if(linkOneResult.err || linkTwoResult.err) {
-    res.status(500).json({'error':'Error creating tot game'})
+  let linkOneResult = await dbHelper.insert(linkInsertSQL, [creatorUser, totGameId, true, true, 1], db)
+  let linkTwoResult = await dbHelper.insert(linkInsertSQL, [challangedUser, totGameId, false, false, 2], db)
+  if (linkOneResult.err || linkTwoResult.err) {
+    res.status(500).json({ 'error': 'Error creating tot game' })
     return
   }
-  res.status(200).json({'success':'Tot game created', 'id':totGameId})
+  res.status(200).json({ 'success': 'Tot game created', 'id': totGameId })
   return
 })
 
-app.post(HREF + '/totGame/accept', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.post(HREF + '/totGame/accept', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
 
-  let {tot_id, userName} = req.body
-  if(!tot_id || !userName) {
-    res.status(400).json({"error":"Required Tot game info missing"})
+  let { tot_id, userName } = req.body
+  if (!tot_id || !userName) {
+    res.status(400).json({ "error": "Required Tot game info missing" })
     return
   }
 
@@ -796,859 +811,859 @@ app.post(HREF + '/totGame/accept', async (req,res) => {
   let insertLinkResult = await dbHelper.update(updateLinkSQL, [tot_id, userName], db)
   let updateTotGameSQL = `UPDATE tot_game set status = 'accepted' where id = ?`
   let insertTotGameResult = await dbHelper.update(updateTotGameSQL, [tot_id], db)
-  if(insertLinkResult.err || insertTotGameResult.err) {
-    res.status(500).json({'error':'Error accetping tot game'})
+  if (insertLinkResult.err || insertTotGameResult.err) {
+    res.status(500).json({ 'error': 'Error accetping tot game' })
     return
   }
-  res.status(200).json({'success':'Tot game updated'})
+  res.status(200).json({ 'success': 'Tot game updated' })
 })
 
-app.post(HREF + '/totGame/delete/:id', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.post(HREF + '/totGame/delete/:id', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
 
-  if(!req.params['id']) {
-    res.status(400).json({'error':'messing required info'})
+  if (!req.params['id']) {
+    res.status(400).json({ 'error': 'messing required info' })
     return
   }
 
   var id = req.params['id']
   var sqlDeleteTotGameLink = 'DELETE FROM user_tot_game where tot_id = ?'
-  let linkDelete = await dbHelper.delete(sqlDeleteTotGameLink,[id], db)
+  let linkDelete = await dbHelper.delete(sqlDeleteTotGameLink, [id], db)
   var sqlDeleteTotGame = 'DELETE FROM tot_game where id = ?'
-  let totGameDelete = await dbHelper.delete(sqlDeleteTotGame,[id], db)
-  if(linkDelete.err || totGameDelete.err) {
-    res.status(500).json({'error':'Error deleting tot games'})
+  let totGameDelete = await dbHelper.delete(sqlDeleteTotGame, [id], db)
+  if (linkDelete.err || totGameDelete.err) {
+    res.status(500).json({ 'error': 'Error deleting tot games' })
     return
   }
-  res.status(200).json({'sucess':'tot game deleted'})
+  res.status(200).json({ 'sucess': 'tot game deleted' })
 })
 
-app.post(HREF + '/list/add', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.post(HREF + '/list/add', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
 
-  let {name, type, is_template, user_name, user_names} = req.body
-  if(!name || !type || is_template == null || ! user_name || user_names == null) {
-    res.status(400).json({"error":"Required list info missing"})
+  let { name, type, is_template, user_name, user_names } = req.body
+  if (!name || !type || is_template == null || !user_name || user_names == null) {
+    res.status(400).json({ "error": "Required list info missing" })
     return
   }
 
   let sql = 'INSERT INTO list (name, type, is_template) values(?,?,?) RETURNING id'
-  let results = await dbHelper.insertAndGet(sql,[name,type,is_template],db);
-  if(results.err) {
-    res.status(500).json({'error':'Error creating list'})
+  let results = await dbHelper.insertAndGet(sql, [name, type, is_template], db);
+  if (results.err) {
+    res.status(500).json({ 'error': 'Error creating list' })
     return
   }
 
   var sqlUserListLink = 'INSERT INTO user_list_link(user_name,list_id, is_owner) Values (?,?,?)'
-  var sqlUserLinstLinkParams = [user_name,results.rows.id,1]
-  if(user_names && user_names.length > 0) {
+  var sqlUserLinstLinkParams = [user_name, results.rows.id, 1]
+  if (user_names && user_names.length > 0) {
     user_names.forEach((item) => {
       sqlUserListLink += ',(?,?,?)'
-      sqlUserLinstLinkParams = [...sqlUserLinstLinkParams,item,results.rows.id,0]
+      sqlUserLinstLinkParams = [...sqlUserLinstLinkParams, item, results.rows.id, 0]
     })
   }
-  let linkResults = await dbHelper.insertAndGet(sqlUserListLink,sqlUserLinstLinkParams,db)
-  if(linkResults.err) {
-    res.status(500).json({'error':'Error setting users for list'})
+  let linkResults = await dbHelper.insertAndGet(sqlUserListLink, sqlUserLinstLinkParams, db)
+  if (linkResults.err) {
+    res.status(500).json({ 'error': 'Error setting users for list' })
     return
   }
 
-  res.status(200).json({'success':'List created', 'id':results.rows.id})
+  res.status(200).json({ 'success': 'List created', 'id': results.rows.id })
   return
 })
 
-app.post(HREF + '/list/addTemplate', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.post(HREF + '/list/addTemplate', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
 
-  let {template_id, list_id} = req.body
-  if(list_id == null || template_id == null) {
-    res.status(400).json({"error":"Required list info missing"})
+  let { template_id, list_id } = req.body
+  if (list_id == null || template_id == null) {
+    res.status(400).json({ "error": "Required list info missing" })
     return
   }
   let insertSQL = `INSERT INTO list_item (name,count,list_id) select name,count,? as 'list_id' from list_item where list_id = ?`
-  insertResults = dbHelper.insert(insertSQL,[list_id,template_id],db)
-  if(insertResults.err) {
-    res.status(500).json({'error':'Error adding template items'})
+  insertResults = dbHelper.insert(insertSQL, [list_id, template_id], db)
+  if (insertResults.err) {
+    res.status(500).json({ 'error': 'Error adding template items' })
     return
   }
-  res.status(200).json({'success':'Template items added'})
+  res.status(200).json({ 'success': 'Template items added' })
 })
 
-app.post(HREF + '/list/delete', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.post(HREF + '/list/delete', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
 
-  let {id} = req.body
-  if(!id) {
-    res.status(400).json({"error":"Required list info missing"})
+  let { id } = req.body
+  if (!id) {
+    res.status(400).json({ "error": "Required list info missing" })
     return
   }
 
   let deleteItemsSQL = 'delete from list_item where list_id = ?'
-  let deleteItemResult = dbHelper.delete(deleteItemsSQL,[id],db)
-  if(deleteItemResult.err) {
-    res.status(500).json({"error":"error deleting list"})
+  let deleteItemResult = dbHelper.delete(deleteItemsSQL, [id], db)
+  if (deleteItemResult.err) {
+    res.status(500).json({ "error": "error deleting list" })
     return
   }
 
   let deleteSQL = 'delete from list where id=?'
-  let deleteResult = await dbHelper.delete(deleteSQL,[id],db)
-  if(deleteResult.err) {
-    res.status(500).json({"error":"error deleting list"})
+  let deleteResult = await dbHelper.delete(deleteSQL, [id], db)
+  if (deleteResult.err) {
+    res.status(500).json({ "error": "error deleting list" })
     return
   }
-  res.status(200).json({'success':'list deleted'})
+  res.status(200).json({ 'success': 'list deleted' })
   return
 })
 
-app.post(HREF + '/listItem/add', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.post(HREF + '/listItem/add', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
 
-  let {list_id, name, count} = req.body
-  if(!name || list_id == null || !count) {
-    res.status(400).json({"error":"Required list item info missing"})
+  let { list_id, name, count } = req.body
+  if (!name || list_id == null || !count) {
+    res.status(400).json({ "error": "Required list item info missing" })
     return
   }
 
   let insertSQL = 'insert into list_item (list_id,name,count) values (?,?,?) RETURNING id'
-  let insertResults = await dbHelper.insertAndGet(insertSQL,[list_id,name,count],db)
-  if(insertResults.err) {
-    res.status(500).json({"error":"error adding item"})
+  let insertResults = await dbHelper.insertAndGet(insertSQL, [list_id, name, count], db)
+  if (insertResults.err) {
+    res.status(500).json({ "error": "error adding item" })
     return
   }
-  res.status(200).json({'success':'list item created','id':insertResults.rows.id})
+  res.status(200).json({ 'success': 'list item created', 'id': insertResults.rows.id })
 })
 
-app.post(HREF + '/listItem/delete', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.post(HREF + '/listItem/delete', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
 
-  let {id} = req.body
-  if(!id) {
-    res.status(400).json({"error":"Required list item info missing"})
+  let { id } = req.body
+  if (!id) {
+    res.status(400).json({ "error": "Required list item info missing" })
     return
   }
 
   let deleteSQL = 'delete from list_item where id=?'
-  let deleteResult = await dbHelper.delete(deleteSQL,[id],db)
-  if(deleteResult.err) {
-    res.status(500).json({"error":"error deleting item"})
+  let deleteResult = await dbHelper.delete(deleteSQL, [id], db)
+  if (deleteResult.err) {
+    res.status(500).json({ "error": "error deleting item" })
     return
   }
-  res.status(200).json({'success':'list item deleted'})
+  res.status(200).json({ 'success': 'list item deleted' })
   return
 })
 
-app.post(HREF + '/game/add', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.post(HREF + '/game/add', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
 
-  let {name, platform, player_min, player_max, genre} = req.body
-  if(!name || !platform || !player_min || !player_max || !genre) {
-    res.status(400).json({"error":"Required game info missing"})
+  let { name, platform, player_min, player_max, genre } = req.body
+  if (!name || !platform || !player_min || !player_max || !genre) {
+    res.status(400).json({ "error": "Required game info missing" })
     return
   }
   let selectSql = 'SELECT * from game WHERE name = ?'
   let gameSelectResult = await dbHelper.select(selectSql, [name], db)
-  if(gameSelectResult.err) {
-    res.status(500).json({'error':'Error while inserting game'})
+  if (gameSelectResult.err) {
+    res.status(500).json({ 'error': 'Error while inserting game' })
     return
   }
-  if(gameSelectResult.rows && gameSelectResult.rows.length > 0) {
+  if (gameSelectResult.rows && gameSelectResult.rows.length > 0) {
     let updateSql = 'UPDATE game set platform = ?,player_min = ?, player_max = ?, genre = ? where name = ?'
-    let updateResults = await dbHelper.update(updateSql,[platform,player_min,player_max,genre,name],db)
-    if(updateResults.err) {
-      res.status(500).json({'error':'Error while inserting game'})
+    let updateResults = await dbHelper.update(updateSql, [platform, player_min, player_max, genre, name], db)
+    if (updateResults.err) {
+      res.status(500).json({ 'error': 'Error while inserting game' })
       return
     }
-    return res.status(200).json({'success':'Game Updated'})
+    return res.status(200).json({ 'success': 'Game Updated' })
   } else {
     let sql = 'INSERT INTO game (name,platform,player_min,player_max,genre) values(?,?,?,?,?)'
-    let gameInsertResult = await dbHelper.insert(sql, [name,platform,player_min,player_max,genre], db)
-    if(gameInsertResult.err) {
-      if(gameInsertResult.err.errno == 19) {
-        res.status(400).json({'error':'Game already exists'})
+    let gameInsertResult = await dbHelper.insert(sql, [name, platform, player_min, player_max, genre], db)
+    if (gameInsertResult.err) {
+      if (gameInsertResult.err.errno == 19) {
+        res.status(400).json({ 'error': 'Game already exists' })
         return
       } else {
-        res.status(500).json({'error':'Error while inserting game'})
+        res.status(500).json({ 'error': 'Error while inserting game' })
         return
       }
     }
-    return res.status(200).json({'success':'Game Added'})
+    return res.status(200).json({ 'success': 'Game Added' })
   }
 })
 
-app.post(HREF + '/gamelink/add', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.post(HREF + '/gamelink/add', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
 
-  let {game_name, installed} = req.body
-  if(!game_name) {
-    res.status(400).json({"error":"Required game link info missing"})
+  let { game_name, installed } = req.body
+  if (!game_name) {
+    res.status(400).json({ "error": "Required game link info missing" })
     return
   }
   var decodedToken
-  try{
+  try {
     decodedToken = jwt.verify(req.headers.authorization.split(' ')[1], secret)
-  } catch(error) {
-    res.status(401).json({"error":"auth token has expired"})
+  } catch (error) {
+    res.status(401).json({ "error": "auth token has expired" })
     return
   }
   var loweredName = decodedToken.name
 
 
   let selectSQL = 'Select * from user_game_link where user_name = ? and game_name = ?'
-  let selectResults = await dbHelper.select(selectSQL,[loweredName, game_name],db)
-  if(selectResults.err) {
-    res.status(500).json({"error":"Error while inserting game link"})
+  let selectResults = await dbHelper.select(selectSQL, [loweredName, game_name], db)
+  if (selectResults.err) {
+    res.status(500).json({ "error": "Error while inserting game link" })
     return
   }
-  if(selectResults.rows.length > 0) {
+  if (selectResults.rows.length > 0) {
     let updateSQL = 'UPDATE user_game_link set installed = ? WHERE user_name = ? and game_name = ?'
     let updateResults = await dbHelper.update(updateSQL, [installed, loweredName, game_name], db)
-    if(updateResults.err) {
-      res.status(500).json({"error":"Error while updating game link"})
+    if (updateResults.err) {
+      res.status(500).json({ "error": "Error while updating game link" })
       return
     } else {
-      res.status(200).json({'success':'Game Link Updated'})
+      res.status(200).json({ 'success': 'Game Link Updated' })
       return
     }
   } else {
     let sql = 'Insert Into user_game_link (user_name,game_name,installed) values(?,?,?)'
-    let gameLinkInsertResult = await dbHelper.insert(sql,[loweredName, game_name, installed],db)
-    if(gameLinkInsertResult.err) {
-      res.status(500).json({"error":"Error while inserting game link"})
+    let gameLinkInsertResult = await dbHelper.insert(sql, [loweredName, game_name, installed], db)
+    if (gameLinkInsertResult.err) {
+      res.status(500).json({ "error": "Error while inserting game link" })
       return
     } else {
-      res.status(200).json({'success':'Game Link Added'})
+      res.status(200).json({ 'success': 'Game Link Added' })
       return
     }
   }
 })
 
-app.post(HREF + '/site/add', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.post(HREF + '/site/add', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
 
-  let {name, reset_time, link} = req.body
-  if(!name || !reset_time || !link) {
-    res.status(400).json({"error":"Required site info missing"})
+  let { name, reset_time, link } = req.body
+  if (!name || !reset_time || !link) {
+    res.status(400).json({ "error": "Required site info missing" })
     return
   }
 
   let selectSql = 'select * from daily_sites where name = ?'
   let selectResult = await dbHelper.select(selectSql, [name], db)
-  if(selectResult.err) {
-    res.status(500).json({'error':'Error Creating Site'})
+  if (selectResult.err) {
+    res.status(500).json({ 'error': 'Error Creating Site' })
     return
   } else {
-    if(selectResult.rows && selectResult.rows.length > 0) {
+    if (selectResult.rows && selectResult.rows.length > 0) {
       let updateSql = 'Update daily_sites set reset_time = ?, link = ? where name = ?'
-      let updateResult = await dbHelper.update(updateSql, [reset_time,link,name], db)
-      if(updateResult.err) {
-        res.status(500).json({'error':'Error Creating Site'})
+      let updateResult = await dbHelper.update(updateSql, [reset_time, link, name], db)
+      if (updateResult.err) {
+        res.status(500).json({ 'error': 'Error Creating Site' })
         return
       }
-      res.status(200).json({'success':'Site Updated'})
+      res.status(200).json({ 'success': 'Site Updated' })
       return
     } else {
       let sql = 'INSERT INTO daily_sites (name, reset_time, link) values(?,?,?)'
-      let results = await dbHelper.insert(sql,[name,reset_time,link],db);
-      if(results.err) {
-        res.status(500).json({'error':'Error Creating Site'})
+      let results = await dbHelper.insert(sql, [name, reset_time, link], db);
+      if (results.err) {
+        res.status(500).json({ 'error': 'Error Creating Site' })
         return
       }
-      res.status(200).json({'success':'Site Created'})
+      res.status(200).json({ 'success': 'Site Created' })
       return
     }
   }
 })
 
-app.post(HREF + '/request/add', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.post(HREF + '/request/add', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
 
-  let {type, message, user_name} = req.body
-  if(!type || !message || !user_name) {
-    res.status(400).json({"error":"Required requests info missing"})
+  let { type, message, user_name } = req.body
+  if (!type || !message || !user_name) {
+    res.status(400).json({ "error": "Required requests info missing" })
     return
   }
 
   let sql = 'INSERT INTO requests (type, message, user_name,to_view) values(?,?,?,?) RETURNING id'
-  let results = await dbHelper.insertAndGet(sql,[type,message,user_name,2],db); // to_view (2) = admin
-  if(results.err) {
-    res.status(500).json({'error':'Error creating request'})
+  let results = await dbHelper.insertAndGet(sql, [type, message, user_name, 2], db); // to_view (2) = admin
+  if (results.err) {
+    res.status(500).json({ 'error': 'Error creating request' })
     return
   }
-  res.status(200).json({'success':'Request created', id:results.rows.id})
+  res.status(200).json({ 'success': 'Request created', id: results.rows.id })
   return
 })
 
-app.post(HREF + '/requestMessage/add', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.post(HREF + '/requestMessage/add', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
 
-  let {id, message, user_name} = req.body
-  if(id == null || !message || !user_name) {
-    res.status(400).json({"error":"Required requests info missing"})
+  let { id, message, user_name } = req.body
+  if (id == null || !message || !user_name) {
+    res.status(400).json({ "error": "Required requests info missing" })
     return
   }
 
-  let userResult = await dbHelper.selectUser(user_name.toLowerCase(),db)
-  if(userResult.err) {
-    res.status(400).json({'error':'Error when finding user to make request'})
+  let userResult = await dbHelper.selectUser(user_name.toLowerCase(), db)
+  if (userResult.err) {
+    res.status(400).json({ 'error': 'Error when finding user to make request' })
   }
   let isAdmin = userResult.rows.length == 0 ? false : userResult.rows[0].is_admin == 1
 
   let sql = 'INSERT INTO request_message (request_id, message, user_name,to_view) values(?,?,?,?)'
-  let results = await dbHelper.insert(sql,[id,message,user_name,isAdmin ? 1:2],db); // to_view 1=user,2=admin
-  if(results.err) {
-    res.status(500).json({'error':'Error creating request message'})
+  let results = await dbHelper.insert(sql, [id, message, user_name, isAdmin ? 1 : 2], db); // to_view 1=user,2=admin
+  if (results.err) {
+    res.status(500).json({ 'error': 'Error creating request message' })
     return
   }
-  res.status(200).json({'success':'Request message created'})
+  res.status(200).json({ 'success': 'Request message created' })
   return
 })
 
-app.post(HREF + '/userSiteLink/add', async (req,res) => {
-  if(!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
-    res.status(401).json({"error":"token was not provided"})
+app.post(HREF + '/userSiteLink/add', async (req, res) => {
+  if (!req.headers.authorization || !req.headers.authorization.split(' ')[1]) {
+    res.status(401).json({ "error": "token was not provided" })
     return
   }
-  let {daily_site_name, site_day_date, guess_count, correct} = req.body
-  if(!daily_site_name || !site_day_date || !guess_count || correct == null) {
-    res.status(400).json({"error":"Required info missing"})
+  let { daily_site_name, site_day_date, guess_count, correct } = req.body
+  if (!daily_site_name || !site_day_date || !guess_count || correct == null) {
+    res.status(400).json({ "error": "Required info missing" })
     return
   }
   var decodedToken
-  try{
+  try {
     decodedToken = jwt.verify(req.headers.authorization.split(' ')[1], secret)
-  } catch(error) {
-    res.status(401).json({"error":"auth token has expired"})
+  } catch (error) {
+    res.status(401).json({ "error": "auth token has expired" })
     return
   }
   var loweredName = decodedToken.name
 
   let selectSql = 'SELECT * from user_site_link where daily_site_name = ? and site_day_date = ? and user_name = ?'
-  let selectResult = await dbHelper.select(selectSql,[daily_site_name, site_day_date, loweredName],db)
-  if(selectResult.err) {
-    res.status(500).json({'error': 'Error while adding link'})
+  let selectResult = await dbHelper.select(selectSql, [daily_site_name, site_day_date, loweredName], db)
+  if (selectResult.err) {
+    res.status(500).json({ 'error': 'Error while adding link' })
     return
   }
-  if(selectResult.rows.length > 0) {
+  if (selectResult.rows.length > 0) {
     let updateSql = 'UPDATE user_site_link set guess_count = ?, correct = ? WHERE daily_site_name = ? and site_day_date = ? and user_name = ?'
-    let updateResult = await dbHelper.update(updateSql,[guess_count, correct, daily_site_name, site_day_date, loweredName],db)
-    if(updateResult.err) {
-      res.status(500).json({'error': 'Error while adding link'})
+    let updateResult = await dbHelper.update(updateSql, [guess_count, correct, daily_site_name, site_day_date, loweredName], db)
+    if (updateResult.err) {
+      res.status(500).json({ 'error': 'Error while adding link' })
       return
     }
-    res.status(200).json({'success':'Updated'})
+    res.status(200).json({ 'success': 'Updated' })
     return
   } else {
     let insertSql = 'INSERT into user_site_link (user_name, daily_site_name, site_day_date, guess_count, correct) values (?,?,?,?,?)'
-    let insertResult = await dbHelper.insert(insertSql, [loweredName,daily_site_name,site_day_date,guess_count,correct], db)
-    if(insertResult.err) {
-      res.status(500).json({'error': 'Error while adding link'})
+    let insertResult = await dbHelper.insert(insertSql, [loweredName, daily_site_name, site_day_date, guess_count, correct], db)
+    if (insertResult.err) {
+      res.status(500).json({ 'error': 'Error while adding link' })
       return
     }
-    res.status(200).json({'success':'added'})
+    res.status(200).json({ 'success': 'added' })
     return
   }
 })
 
-app.get(HREF + '/users/game', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.get(HREF + '/users/game', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
 
   let sql = 'SELECT * from user_game_link join game on game.name == user_game_link.game_name'
   let params = req.query
-  if(params) {
+  if (params) {
     let whereClauses = []
-    if(params.users) {
+    if (params.users) {
       let users = params.users.split(',')
-      whereClauses.push(`user_name in (${users.map((item)=> {
+      whereClauses.push(`user_name in (${users.map((item) => {
         return `'${item}'`
       })})`)
     }
-    if(params.games) {
+    if (params.games) {
       let games = params.games.split(',')
-      whereClauses.push(`game_name in (${games.map((item)=> {
+      whereClauses.push(`game_name in (${games.map((item) => {
         return `'${item}'`
       })})`)
     }
-    if(params.playerCount && params.playerCount != 0) {
+    if (params.playerCount && params.playerCount != 0) {
       whereClauses.push(`player_min <= ${params.playerCount} and player_max >= ${params.playerCount}`)
     }
-    if(params.genre) {
+    if (params.genre) {
       let genres = params.genre.split(',')
       whereClauses.push(`genre in (${genres.map((item) => {
         return `'${item}'`
       })})`)
     }
-    if(params.installed) {
+    if (params.installed) {
       whereClauses.push(`installed = ${params.installed}`)
     }
 
     var whereString = '';
-    if(whereClauses.length > 0) {
+    if (whereClauses.length > 0) {
       whereString = ' where '
       for (let i = 0; i < whereClauses.length; i++) {
-        if(i != 0) {
+        if (i != 0) {
           whereString += ' and '
         }
         whereString += whereClauses[i]
       }
     }
 
-    let result = await dbHelper.select(sql + whereString,[],db)
+    let result = await dbHelper.select(sql + whereString, [], db)
     res.status(200).json(result.rows)
     return
   }
-  let result = await dbHelper.select(sql,[],db)
+  let result = await dbHelper.select(sql, [], db)
   res.status(200).json(result.rows)
 })
 
-app.post(HREF + '/totGame/action', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.post(HREF + '/totGame/action', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
 
-  let {action, id} = req.body
-  if(!action && id != null) {
-    res.status(400).json({"error":"Required info missing"})
+  let { action, id } = req.body
+  if (!action && id != null) {
+    res.status(400).json({ "error": "Required info missing" })
     return
   }
 
   let getGameStateSQL = `SELECT * FROM tot_game where id = ?`
-  let gameStateResult =  await dbHelper.select(getGameStateSQL, [id], db)
-  if(gameStateResult.err) {
+  let gameStateResult = await dbHelper.select(getGameStateSQL, [id], db)
+  if (gameStateResult.err) {
     return 'error'
   }
   let gameState = JSON.parse(gameStateResult.rows[0].game_json);
   gameState.game_id = id
   var result = '{"error":"Error running command"}';
-  if(gameState.type == 'tic-tac-toe') {
+  if (gameState.type == 'tic-tac-toe') {
     result = await TicTacToe.HandleTicTacToeAction(action, gameState, db, dbHelper)
   } else if (gameState.type == 'stratego') {
     result = await Stratego.HandleStrategoAction(action, gameState, db, dbHelper)
   }
-  if(result == "error") {
-    res.status(500).json({"error":"error handleing action"})
+  if (result == "error") {
+    res.status(500).json({ "error": "error handleing action" })
   }
   res.status(200).json(result)
   return
 })
 
-app.get(HREF + '/highscore', async (req,res) => {
-  let {game, date, limit, start} = req.query
-  if(!game) {
-    res.status(400).json({"error":"Required info missing"})
+app.get(HREF + '/highscore', async (req, res) => {
+  let { game, date, limit, start } = req.query
+  if (!game) {
+    res.status(400).json({ "error": "Required info missing" })
     return
   }
   var startDate = '1900-01-01'
   var endDate = '3000-01-01'
-  
-  if(date != null) {
+
+  if (date != null) {
     let d = new Date(date)
     startDate = dateHelper.GetYYYYMMDDhhmmss(d)
-    dateHelper.AddDays(d,1)
+    dateHelper.AddDays(d, 1)
     endDate = dateHelper.GetYYYYMMDDhhmmss(d)
   }
 
   let getSQL = `select game,user_name,display_name, max(score) as 'score' from high_scores where game = ? and created_on < ? and created_on > ? group by game,user_name,display_name order by score desc LIMIT ${limit ? limit : 10} OFFSET ${start ? start : 0}`
-  let getResult = await dbHelper.select(getSQL, [game,endDate,startDate], db)
-  if(getResult.err) {
-    res.status(500).json({'error':'Error getting data','data':[]})
+  let getResult = await dbHelper.select(getSQL, [game, endDate, startDate], db)
+  if (getResult.err) {
+    res.status(500).json({ 'error': 'Error getting data', 'data': [] })
     return
   }
-  res.status(200).json({'success':'Success','data':getResult.rows})
+  res.status(200).json({ 'success': 'Success', 'data': getResult.rows })
   return
 })
 
-app.post(HREF + '/highscore/submit', async (req,res) => {
-  let {game, score, userName, password} = req.body
-  if(!game || !score || !userName || !password) {
-    res.status(400).json({"error":"Required info missing"})
+app.post(HREF + '/highscore/submit', async (req, res) => {
+  let { game, score, userName, password } = req.body
+  if (!game || !score || !userName || !password) {
+    res.status(400).json({ "error": "Required info missing" })
     return
   }
 
   let loweredName = userName.toLowerCase()
   var encodedpassword = md5(password)
-  let selectResult = await dbHelper.select('SELECT * from user where name = ? and secret = ? LIMIT 1', [loweredName, encodedpassword],db)
-  if(selectResult.err) {
-    res.status(500).json({"error":"Error on server when verifying user"})
+  let selectResult = await dbHelper.select('SELECT * from user where name = ? and secret = ? LIMIT 1', [loweredName, encodedpassword], db)
+  if (selectResult.err) {
+    res.status(500).json({ "error": "Error on server when verifying user" })
     return
   }
-  if(!selectResult.rows || selectResult.rows.length == 0) {
-    res.status(400).json({"error":"No user with specified user name and password"})
+  if (!selectResult.rows || selectResult.rows.length == 0) {
+    res.status(400).json({ "error": "No user with specified user name and password" })
     return
   }
   let user = selectResult.rows[0]
   let getHighScoreSQL = `Select * from high_scores where user_name = ? and game = ? order by created_on desc LIMIT 1`
-  let getHighScoreResult = await dbHelper.select(getHighScoreSQL,[user.name, game],db)
-  if(getHighScoreResult.err) {
-    res.status(500).json({"error":"Error on server when verifying user"})
+  let getHighScoreResult = await dbHelper.select(getHighScoreSQL, [user.name, game], db)
+  if (getHighScoreResult.err) {
+    res.status(500).json({ "error": "Error on server when verifying user" })
     return
   }
-  if((!getHighScoreResult.rows || getHighScoreResult.rows.length == 0) ||
-      dateHelper.GetLocalYYYYMMDD(new Date(getHighScoreResult.rows[0].created_on + 'Z')) != dateHelper.GetLocalYYYYMMDD(new Date()) ) {
+  if ((!getHighScoreResult.rows || getHighScoreResult.rows.length == 0) ||
+    dateHelper.GetLocalYYYYMMDD(new Date(getHighScoreResult.rows[0].created_on + 'Z')) != dateHelper.GetLocalYYYYMMDD(new Date())) {
     let insertSQL = `insert into high_scores(game,user_name,score,display_name) values(?,?,?,?)`
-    let insertResult = await dbHelper.insert(insertSQL,[game,user.name,score,user.name],db)
-    if(insertResult.err) {
-      res.status(500).json({error:'Error on server when creating record'})
+    let insertResult = await dbHelper.insert(insertSQL, [game, user.name, score, user.name], db)
+    if (insertResult.err) {
+      res.status(500).json({ error: 'Error on server when creating record' })
       return
     }
-    res.status(200).json({success:'Score created'})
+    res.status(200).json({ success: 'Score created' })
     return
   } else {
-    if(score > getHighScoreResult.rows[0].score) {
+    if (score > getHighScoreResult.rows[0].score) {
       let updateSQL = `update high_scores set score = ? where id = ?`
-      let updateResult = await dbHelper.update(updateSQL,[score,getHighScoreResult.rows[0].id],db)
-      if(updateResult.err) {
-        res.status(500).json({error:'Error on server when updating record'})
+      let updateResult = await dbHelper.update(updateSQL, [score, getHighScoreResult.rows[0].id], db)
+      if (updateResult.err) {
+        res.status(500).json({ error: 'Error on server when updating record' })
         return
       }
-      res.status(200).json({success:'Score updated'})
+      res.status(200).json({ success: 'Score updated' })
       return
     } else {
-      res.status(200).json({success:'No update, higher score already exists'})
+      res.status(200).json({ success: 'No update, higher score already exists' })
       return
     }
   }
 })
 
-app.get(HREF + '/notifications', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.get(HREF + '/notifications', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
 
-  let {userName} = req.query
-  if(!userName) {
-    res.status(400).json({"error":"Required info missing"})
+  let { userName } = req.query
+  if (!userName) {
+    res.status(400).json({ "error": "Required info missing" })
     return
   }
 
   let selectSQL = `select * from user u join user_notification_preference unp on u.name = unp.user_name where user_name = ?`
-  let selectResult = await dbHelper.select(selectSQL,[userName],db)
-  if(selectResult.err) {
-    res.status(500).json({error:'error while getting notification settings'})
+  let selectResult = await dbHelper.select(selectSQL, [userName], db)
+  if (selectResult.err) {
+    res.status(500).json({ error: 'error while getting notification settings' })
     return
   }
-  if(!selectResult || selectResult.rows.length == 0) {
-    res.status(200).json({success:"No settings for user", rows:[]})
+  if (!selectResult || selectResult.rows.length == 0) {
+    res.status(200).json({ success: "No settings for user", rows: [] })
     return
   }
   let NotificationList = []
   let user = selectResult.rows[0]
   let preferences = user
-  if(preferences.daily_guess) {
+  if (preferences.daily_guess) {
     const lastGuessDate = new Date(preferences.last_daily_guess + 'Z')
     const currentDate = new Date()
-    if(lastGuessDate.getUTCDate() != currentDate.getUTCDate() ||
+    if (lastGuessDate.getUTCDate() != currentDate.getUTCDate() ||
       lastGuessDate.getUTCMonth() != currentDate.getUTCMonth()) {
-        NotificationList.push({type:'Daily Guess',message:'Your daily guess is available',link:'/game/dailyGuess'})
+      NotificationList.push({ type: 'Daily Guess', message: 'Your daily guess is available', link: '/site/game/dailyGuess' })
     }
   }
-  if(preferences.tot_game) {
+  if (preferences.tot_game) {
     let totGameSelect = `Select * from tot_game tg join user_tot_game utg on tg.id = utg.tot_id where utg.user_name = ?`
-    let totGameResult = await dbHelper.select(totGameSelect,[userName],db)
-    if(totGameResult.err) {
-      res.status(500).json({'error':'error while getting notifications'})
+    let totGameResult = await dbHelper.select(totGameSelect, [userName], db)
+    if (totGameResult.err) {
+      res.status(500).json({ 'error': 'error while getting notifications' })
       return
     }
     totGameResult.rows.forEach(element => {
-      if(!element.accepted) {
-        NotificationList.push({type:'Tot game challage',message:`You have been challanged to a ${element.type} game.`,link:`/game/totGames`})
+      if (!element.accepted) {
+        NotificationList.push({ type: 'Tot game challage', message: `You have been challanged to a ${element.type} game.`, link: `/site/game/totGames` })
       }
-      if(element.status == 'accepted' && (element.current_player == element.player_num || element.current_player == 0)) {
-        NotificationList.push({type:'Tot game turn',message:`It is your turn in a ${element.type} game`,link:`/game/totGames/game?id=${element.tot_id}`})
+      if (element.status == 'accepted' && (element.current_player == element.player_num || element.current_player == 0)) {
+        NotificationList.push({ type: 'Tot game turn', message: `It is your turn in a ${element.type} game`, link: `/site/game/totGames/game?id=${element.tot_id}` })
       }
     });
   }
-  if(preferences.requests) {
+  if (preferences.requests) {
     let requestSql = `select r.*, rm.to_view as 'message_to_view' from requests r left join request_message rm on r.id = rm.request_id where closed = 0`
-    if(!user.is_admin) {
+    if (!user.is_admin) {
       requestSql += ` and r.user_name = '${userName}'`
     }
-    let requestResults = await dbHelper.select(requestSql,[],db)
-    if(requestResults.err) {
-      res.status(500).json({'error':'error while getting notifications'})
+    let requestResults = await dbHelper.select(requestSql, [], db)
+    if (requestResults.err) {
+      res.status(500).json({ 'error': 'error while getting notifications' })
       return
     }
     let newRequestsToView = 0
     let newRequestMessagesToView = 0
     let viewedRequests = []
     requestResults.rows.forEach(element => {
-      if(user.is_admin) {
-        if(element.to_view == 2 && !viewedRequests.includes(element.id)) {
+      if (user.is_admin) {
+        if (element.to_view == 2 && !viewedRequests.includes(element.id)) {
           newRequestsToView += 1
           viewedRequests.push(element.id)
         }
-        if(element.message_to_view == 2) {
+        if (element.message_to_view == 2) {
           newRequestMessagesToView += 1
         }
       } else {
-        if(element.to_view == 1 && !viewedRequests.includes(element.id)) {
+        if (element.to_view == 1 && !viewedRequests.includes(element.id)) {
           newRequestsToView += 1
           viewedRequests.push(element.id)
         }
-        if(element.message_to_view == 1) {
+        if (element.message_to_view == 1) {
           newRequestMessagesToView += 1
         }
       }
     })
 
-    if(newRequestsToView > 0 || newRequestMessagesToView > 0) {
-      NotificationList.push({type:'Requests',message:`${newRequestsToView} new Request(s) and ${newRequestMessagesToView} new Request Message(s) to view`, link: '/tools/requests'})
+    if (newRequestsToView > 0 || newRequestMessagesToView > 0) {
+      NotificationList.push({ type: 'Requests', message: `${newRequestsToView} new Request(s) and ${newRequestMessagesToView} new Request Message(s) to view`, link: '/site/tools/requests' })
     }
   }
-  if(preferences.daily_quiz_results) {
+  if (preferences.daily_quiz_results) {
     // let resultsSelect = ``
     // let resultsResults = await dbHelper.select(resultsSelect,[],db)
   }
-  res.status(200).json({success:'notifications found', rows:NotificationList})
+  res.status(200).json({ success: 'notifications found', rows: NotificationList })
   return
 })
 
-app.post(HREF + '/directory/create', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
-    res.status(500).json({"error":tokenResult.error})
+app.post(HREF + '/directory/create', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
+    res.status(500).json({ "error": tokenResult.error })
     return
   }
   var result = fileHelper.CreateDirectory(`users/${tokenResult.name}`)
-  if(!result) {
-    res.status(500).json({error:'Failed to create directory'})
+  if (!result) {
+    res.status(500).json({ error: 'Failed to create directory' })
     return
   }
-  res.status(200).json({success:'created directory'})
+  res.status(200).json({ success: 'created directory' })
 })
 
-app.get(HREF + '/FileList', async (req,res) => {
-  let {drive,size, page, withPreview} = req.query
-  if(!drive) {
-    res.status(400).json({"error":"Required info missing"})
+app.get(HREF + '/FileList', async (req, res) => {
+  let { drive, size, page, withPreview } = req.query
+  if (!drive) {
+    res.status(400).json({ "error": "Required info missing" })
     return
   }
   let sizeNum = !size ? 20 : parseInt(size)
   let pageNum = !page ? 0 : parseInt(page)
-  let isPreview = withPreview=='false' ? false : true
-  var files = await fileHelper.GetFiles(drive, sizeNum, pageNum * sizeNum,isPreview);
+  let isPreview = withPreview == 'false' ? false : true
+  var files = await fileHelper.GetFiles(drive, sizeNum, pageNum * sizeNum, isPreview);
   res.status(200).json(files);
 })
 
-app.get(HREF + '/File', async (req,res) => {
-  let {drive, name} = req.query
-  if(!drive || !name) {
-    res.status(400).json({"error":"Required info missing"})
+app.get(HREF + '/File', async (req, res) => {
+  let { drive, name } = req.query
+  if (!drive || !name) {
+    res.status(400).json({ "error": "Required info missing" })
     return
   }
 
-  var file = await fileHelper.GetFile(name,drive);
-  res.status(200).json({data: file})
+  var file = await fileHelper.GetFile(name, drive);
+  res.status(200).json({ data: file })
 })
 
-app.post(HREF + '/PostFile', async (req,res) => {
-  let {name, drive, data} = req.body
-  if(!name || !drive || !data) {
-    res.status(400).json({"error":"Required info missing"})
+app.post(HREF + '/PostFile', async (req, res) => {
+  let { name, drive, data } = req.body
+  if (!name || !drive || !data) {
+    res.status(400).json({ "error": "Required info missing" })
     return
   }
-  await fileHelper.CreateFile(name,drive,data)
-  res.status(200).json({success:'File Uploaded'})
+  await fileHelper.CreateFile(name, drive, data)
+  res.status(200).json({ success: 'File Uploaded' })
 })
 
-app.post(HREF + '/DeleteFile', async (req,res) => {
-  let {name, drive} = req.body
-  var result = await fileHelper.DeleteFile(name,drive)
-  res.status(200).json({success:result})
+app.post(HREF + '/DeleteFile', async (req, res) => {
+  let { name, drive } = req.body
+  var result = await fileHelper.DeleteFile(name, drive)
+  res.status(200).json({ success: result })
 })
 
-app.get(HREF + '/Drive', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
-    res.status(500).json({"error":tokenResult.error})
+app.get(HREF + '/Drive', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
+    res.status(500).json({ "error": tokenResult.error })
     return
   }
 
   let selectSQL = "Select s.id,s.name,s.path,usl.user_name,usl.is_owner from drive s join user_drive_link usl on s.id = usl.drive_id where usl.user_name = ?"
-  let selectResult = await dbHelper.select(selectSQL,[tokenResult.name],db)
-  if(selectResult.err) {
-    res.status(500).json({error:'error getting shares'})
+  let selectResult = await dbHelper.select(selectSQL, [tokenResult.name], db)
+  if (selectResult.err) {
+    res.status(500).json({ error: 'error getting shares' })
   }
   res.status(200).json(selectResult.rows)
 })
 
-app.get(HREF + '/Drive/users', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.get(HREF + '/Drive/users', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
 
-  let {driveid} = req.query
-  if(!driveid) {
-    res.status(400).json({"error":"Required info missing"})
+  let { driveid } = req.query
+  if (!driveid) {
+    res.status(400).json({ "error": "Required info missing" })
     return
   }
-  
+
   let selectSQL = "Select user_name from user_drive_link where drive_id = ?"
-  let selectResult = await dbHelper.select(selectSQL,[driveid],db)
-  if(selectResult.err) {
-    res.status(500).json({error:'error getting users of share'})
+  let selectResult = await dbHelper.select(selectSQL, [driveid], db)
+  if (selectResult.err) {
+    res.status(500).json({ error: 'error getting users of share' })
     return
   }
   res.status(200).json(selectResult.rows)
 })
 
-app.post(HREF + '/Drive/users/update',async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.post(HREF + '/Drive/users/update', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
 
-  let {users,driveId} = req.body
-  if(users == null || driveId == null) {
-    res.status(400).json({"error":"Required info missing"})
+  let { users, driveId } = req.body
+  if (users == null || driveId == null) {
+    res.status(400).json({ "error": "Required info missing" })
     return
   }
   let getDriveUsersQuery = 'SELECT * FROM user_drive_link where drive_id = ?'
-  let getDriveUsersResult = await dbHelper.select(getDriveUsersQuery,[driveId],db)
-  if(getDriveUsersResult.err) {
-    res.status(500).json({error:'Failed to update users'})
+  let getDriveUsersResult = await dbHelper.select(getDriveUsersQuery, [driveId], db)
+  if (getDriveUsersResult.err) {
+    res.status(500).json({ error: 'Failed to update users' })
   }
   let currentDriveUsers = getDriveUsersResult.rows
 
   await Promise.all(users.map(async element => {
-    const i = currentDriveUsers.findIndex(e => e.user_name == element); 
+    const i = currentDriveUsers.findIndex(e => e.user_name == element);
     if (i > -1) {
-      currentDriveUsers.splice(i,1)
+      currentDriveUsers.splice(i, 1)
     } else {
       let inserUserLink = 'INSERT INTO user_drive_link (drive_id,user_name,is_owner) VALUES (?,?,?)'
-      let inserResult = await dbHelper.insert(inserUserLink,[driveId,element,false],db)
+      let inserResult = await dbHelper.insert(inserUserLink, [driveId, element, false], db)
     }
   }))
-  if(currentDriveUsers.length > 0) {
-    await Promise.all(currentDriveUsers.map(async  element => {
+  if (currentDriveUsers.length > 0) {
+    await Promise.all(currentDriveUsers.map(async element => {
       let deleteUserLink = 'DELETE FROM user_drive_link where drive_id = ? and user_name = ?'
-      let result = await dbHelper.delete(deleteUserLink,[driveId,element.user_name],db)
+      let result = await dbHelper.delete(deleteUserLink, [driveId, element.user_name], db)
     }))
   }
-  res.status(200).json({success:'users updated'})
+  res.status(200).json({ success: 'users updated' })
 })
 
-app.post(HREF + '/Drive/create', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
+app.post(HREF + '/Drive/create', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
     return
   }
 
-  let {drive} = req.body
-  if(!drive) {
-    res.status(400).json({"error":"Required info missing"})
+  let { drive } = req.body
+  if (!drive) {
+    res.status(400).json({ "error": "Required info missing" })
     return
   }
 
   let selectShareNames = 'Select name from drive'
-  let selectSharenamesResult = await dbHelper.select(selectShareNames,[],db)
-  if(selectSharenamesResult.err) {
-    res.status(500).json({error:'failed to create drive'})
+  let selectSharenamesResult = await dbHelper.select(selectShareNames, [], db)
+  if (selectSharenamesResult.err) {
+    res.status(500).json({ error: 'failed to create drive' })
   }
-  let index = selectSharenamesResult.rows.findIndex(x => {return x.name == drive})
-  if(index != -1 || drive == 'users') {
-    res.status(500).json({error:'Drive with that name already exists'})
+  let index = selectSharenamesResult.rows.findIndex(x => { return x.name == drive })
+  if (index != -1 || drive == 'users') {
+    res.status(500).json({ error: 'Drive with that name already exists' })
     return
   }
   var result = fileHelper.CreateDirectory(drive)
-  if(!result) {
-    res.status(500).json({error:'Failed to create directory'})
+  if (!result) {
+    res.status(500).json({ error: 'Failed to create directory' })
     return
   }
   let insertDriveSql = 'Insert INTO drive (name,path,creator_name) VALUES (?,?,?) returning id'
-  let insertDriveResult = await dbHelper.insertAndGet(insertDriveSql,[drive,drive, tokenResult.name],db)
-  if(insertDriveResult.err) {
-    res.status(500).json({error:'Failed to create drive record'})
+  let insertDriveResult = await dbHelper.insertAndGet(insertDriveSql, [drive, drive, tokenResult.name], db)
+  if (insertDriveResult.err) {
+    res.status(500).json({ error: 'Failed to create drive record' })
     return
   }
   let driveId = insertDriveResult.rows.id
   let insertUserDriveLink = 'INSERT INTO user_drive_link (drive_id,user_name,is_owner) VALUES (?,?,?)'
-  let insertUserDriveLinkResult = await dbHelper.insert(insertUserDriveLink,[driveId,tokenResult.name,true],db)
-  if(insertUserDriveLinkResult.err) {
-    res.status(500).json({error:'Failed to create user drive link'})
+  let insertUserDriveLinkResult = await dbHelper.insert(insertUserDriveLink, [driveId, tokenResult.name, true], db)
+  if (insertUserDriveLinkResult.err) {
+    res.status(500).json({ error: 'Failed to create user drive link' })
     return
   }
-  res.status(200).json({success:'Drive created', id: driveId})
+  res.status(200).json({ success: 'Drive created', id: driveId })
 })
 
-app.post(HREF + '/Drive/delete', async (req,res) => {
-  let tokenResult = CheckForTokenAndRespond(req,res);
-  if(!tokenResult.success) {
-    res.status(500).json({"error":tokenResult.error})
+app.post(HREF + '/Drive/delete', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
+    res.status(500).json({ "error": tokenResult.error })
     return
   }
 
-  let {driveId} = req.body
-  if(driveId == null) {
-    res.status(400).json({"error":"Required info missing"})
+  let { driveId } = req.body
+  if (driveId == null) {
+    res.status(400).json({ "error": "Required info missing" })
     return
   }
   let GetDriveQuery = 'SELECT * from drive where id = ?'
-  let getDriveResults = await dbHelper.select(GetDriveQuery,[driveId],db)
-  if(!getDriveResults.rows || getDriveResults.rows.length == 0) {
-    res.status(500).json({error:'No Drive with that id to delete'})
+  let getDriveResults = await dbHelper.select(GetDriveQuery, [driveId], db)
+  if (!getDriveResults.rows || getDriveResults.rows.length == 0) {
+    res.status(500).json({ error: 'No Drive with that id to delete' })
     return
   }
   let deleteDirectoryResult = fileHelper.DeleteDirectory(getDriveResults.rows[0].path)
-  if(!deleteDirectoryResult) {
-    res.status(500).json({error:'Failed to delete files'})
+  if (!deleteDirectoryResult) {
+    res.status(500).json({ error: 'Failed to delete files' })
     return
   }
   let deleteLinkQuery = 'DELETE FROM user_drive_link where drive_id = ?'
-  let deleteLinkResults = await dbHelper.delete(deleteLinkQuery,[driveId],db)
-  if(deleteLinkResults.err) {
-    res.status(500).json({error:'Failed to delete user link records'})
+  let deleteLinkResults = await dbHelper.delete(deleteLinkQuery, [driveId], db)
+  if (deleteLinkResults.err) {
+    res.status(500).json({ error: 'Failed to delete user link records' })
   }
   let deleteDriveQuery = 'DELETE FROM drive where id = ?'
-  let deleteDriveResults = await dbHelper.delete(deleteDriveQuery,[driveId],db)
-  if(deleteDriveResults.err) {
-    res.status(500).json({error:'failed to delete drive record'})
+  let deleteDriveResults = await dbHelper.delete(deleteDriveQuery, [driveId], db)
+  if (deleteDriveResults.err) {
+    res.status(500).json({ error: 'failed to delete drive record' })
   }
-  res.status(200).json({success:'drive deleted'})
+  res.status(200).json({ success: 'drive deleted' })
 })
 
-app.post(HREF + '/startPasswordReset',async (req,res) => {
-  let {email,username} = req.body
-  if(email == null || username == null) {
-    res.status(400).json({"error":"Required info missing"})
+app.post(HREF + '/startPasswordReset', async (req, res) => {
+  let { email, username } = req.body
+  if (email == null || username == null) {
+    res.status(400).json({ "error": "Required info missing" })
     return
   }
   let loweredEmail = email.toLowerCase();
@@ -1656,15 +1671,15 @@ app.post(HREF + '/startPasswordReset',async (req,res) => {
 
   //Verify it is the right user
   let getUserSql = 'SELECT * from user where name = ? and email = ?'
-  let getUserResult = await dbHelper.select(getUserSql,[loweredUserName,loweredEmail],db)
-  if(getUserResult.err) {
-    res.status(500).json({error:'error starting reset process'})
+  let getUserResult = await dbHelper.select(getUserSql, [loweredUserName, loweredEmail], db)
+  if (getUserResult.err) {
+    res.status(500).json({ error: 'error starting reset process' })
     return
   }
-  if(!getUserResult.rows || getUserResult.rows.length == 0) {
+  if (!getUserResult.rows || getUserResult.rows.length == 0) {
     //Send a success even though no email sent to protect privacy
     console.log('Could not find specified user and email to reset email')
-    res.status(200).json({success: 'Could not find specified user and email to reset email'})
+    res.status(200).json({ success: 'Could not find specified user and email to reset email' })
     return
   }
 
@@ -1673,70 +1688,178 @@ app.post(HREF + '/startPasswordReset',async (req,res) => {
 
   //Insert reset
   let resetSQL = `Insert into reset (type,reset_code,user_name,valid_length) values(?,?,?,?)`
-  let resetResult = await dbHelper.insert(resetSQL,['password',resetCode,loweredUserName,30],db)
-  if(resetResult.err) {
-    res.status(500).json({error:'error starting reset process'})
+  let resetResult = await dbHelper.insert(resetSQL, ['password', resetCode, loweredUserName, 30], db)
+  if (resetResult.err) {
+    res.status(500).json({ error: 'error starting reset process' })
     return
   }
 
-  try{
-    result = await mailHelper.SendMail(loweredEmail,resetCode)
-    res.status(200).json({success:'Reset Email Sent, Please check spam folder'})
+  try {
+    result = await mailHelper.SendMail(loweredEmail, resetCode)
+    res.status(200).json({ success: 'Reset Email Sent, Please check spam folder' })
     return
-  } catch(ex) {
+  } catch (ex) {
     console.log(ex)
-    res.status(500).json({error:ex})
+    res.status(500).json({ error: ex })
     return
   }
 })
 
-app.post(HREF + '/resetPassword',async (req,res) => {
-  let {password,resetCode} = req.body
-  if(password == null || resetCode == null) {
-    res.status(400).json({"error":"Required info missing"})
+app.post(HREF + '/resetPassword', async (req, res) => {
+  let { password, resetCode } = req.body
+  if (password == null || resetCode == null) {
+    res.status(400).json({ "error": "Required info missing" })
     return
   }
 
   //Get reset record
   let getResetSql = 'SELECT * from reset where reset_code = ? order by created_on desc limit 1'
-  let getResetResult = await dbHelper.select(getResetSql,[resetCode],db)
-  if(getResetResult.err) {
-    res.status(500).json({error:'error reseting password'})
+  let getResetResult = await dbHelper.select(getResetSql, [resetCode], db)
+  if (getResetResult.err) {
+    res.status(500).json({ error: 'error reseting password' })
     return
   }
-  if(!getResetResult.rows || getResetResult.rows == 0) {
-    res.status(500).json({error:`couldn't reset password, try starting over`})
+  if (!getResetResult.rows || getResetResult.rows == 0) {
+    res.status(500).json({ error: `couldn't reset password, try starting over` })
     return
   }
   let resetRecord = getResetResult.rows[0]
-  let validToDate = new Date(dateHelper.AddMinutes(new Date(resetRecord.created_on + 'Z'),30).toString() + 'Z')
-  if(validToDate < new Date() ) {
-    res.status(500).json({error:'reset code is no longer valid'})
+  let validToDate = new Date(dateHelper.AddMinutes(new Date(resetRecord.created_on + 'Z'), 30).toString() + 'Z')
+  if (validToDate < new Date()) {
+    res.status(500).json({ error: 'reset code is no longer valid' })
     return
   }
 
   //Delete reset record
   let deleteResetSql = 'DELETE from reset where id = ?'
-  let deleteResetResult = await dbHelper.delete(deleteResetSql,[resetRecord.id],db)
-  if(deleteResetResult.err) {
-    res.status(500).json({error:'error reseting password'})
+  let deleteResetResult = await dbHelper.delete(deleteResetSql, [resetRecord.id], db)
+  if (deleteResetResult.err) {
+    res.status(500).json({ error: 'error resetting password' })
     return
   }
 
   //Update password
   let encodedPassword = md5(password)
   let updateSql = `UPDATE user set secret = ? where name = ?`
-  let updateResult = await dbHelper.update(updateSql,[encodedPassword,resetRecord.user_name],db)
-  if(updateResult.err) {
-    res.status(500).json({error:`Couldn't reset password`})
+  let updateResult = await dbHelper.update(updateSql, [encodedPassword, resetRecord.user_name], db)
+  if (updateResult.err) {
+    res.status(500).json({ error: `Couldn't reset password` })
     return
   }
-  res.status(200).json({success:'updated password sucessfully'})
+  res.status(200).json({ success: 'updated password successfully' })
+})
+
+app.get(HREF + '/getCurrentNumPuzzle', async (req, res) => {
+  let tokenResult = CheckForToken(req, res);
+
+  let numGenerator = new NumGenerator()
+  let date = new Date()
+  let nextDate = dateHelper.AddDays(new Date(), 1)
+
+  let selectNumSQL = `SELECT * FROM number_puzzle where created_on > ? and created_on < ?`
+  let numResult = await dbHelper.select(selectNumSQL, [dateHelper.GetYYYYMMDD(date), dateHelper.GetYYYYMMDD(nextDate)], db)
+  if (numResult.err) {
+    console.log(numResult.err)
+    res.status(500).json({ error: `Couldn't get puzzle` })
+    return
+  }
+
+  let selectRuleSQL = `SELECT * FROM number_puzzle_rule where number_puzzle_id = ?`
+  let ruleResult = await dbHelper.select(selectRuleSQL, [numResult.rows[0].id], db)
+  if (ruleResult.err) {
+    console.log(ruleResult.err)
+    res.status(500).json({ error: `Couldn't get puzzle` })
+    return
+  }
+
+  let genResult = numGenerator.convertObjectToNumber(numResult.rows[0])
+  genResult.rules = []
+  for (let i = 0; i < ruleResult.rows.length; i++) {
+    genResult.rules.push(numGenerator.convertObjectToRule(ruleResult.rows[i]))
+  }
+  let answered = false
+  if (tokenResult.success) {
+    let name = tokenResult.name
+    //check if already guessed
+    let selectLinkSQL = `SELECT * from user_number_puzzle_link where user_name = ? order by end_time_epoch desc limit 1`
+    let selectResult = await dbHelper.select(selectLinkSQL, [name], db)
+    if (!selectResult.err) {
+      if (selectResult.rows == null || selectResult.rows.length == 0 || dateHelper.GetYYYYMMDD(new Date(selectResult.rows[0].start_time_epoch)) != dateHelper.GetYYYYMMDD(new Date())) {
+        let linkInsertSQL = `INSERT INTO user_number_puzzle_link(user_name,number_puzzle_id,start_time_epoch,points) VALUES(?,?,?,0)`
+        let linkResults = await dbHelper.insert(linkInsertSQL, [name, genResult.id, new Date().getTime()], db)
+        if (linkResults.err) {
+          console.log(updateResult.err)
+        }
+      } else {
+        answered = true
+      }
+    }
+  }
+
+  res.status(200).json({ success: 'retrieved number puzzle', answered: answered, generatedNum: genResult })
+})
+
+app.post(HREF + '/guessCurrentNumPuzzle', async (req, res) => {
+  let tokenResult = CheckForToken(req, res);
+
+  let { guess } = req.body
+  if (guess == null) {
+    res.status(400).json({ "error": "Required info missing" })
+    return
+  }
+
+  let numGenerator = new NumGenerator()
+  let date = new Date()
+  let nextDate = dateHelper.AddDays(new Date(), 1)
+
+  let selectNumSQL = `SELECT * FROM number_puzzle where created_on > ? and created_on < ?`
+  let numResult = await dbHelper.select(selectNumSQL, [dateHelper.GetYYYYMMDD(date), dateHelper.GetYYYYMMDD(nextDate)], db)
+  if (numResult.err) {
+    console.log(numResult.err)
+    res.status(500).json({ error: `Couldn't get puzzle` })
+    return
+  }
+
+  let selectRuleSQL = `SELECT * FROM number_puzzle_rule where number_puzzle_id = ?`
+  let ruleResult = await dbHelper.select(selectRuleSQL, [numResult.rows[0].id], db)
+  if (ruleResult.err) {
+    console.log(ruleResult.err)
+    res.status(500).json({ error: `Couldn't get puzzle` })
+    return
+  }
+
+  let genResult = numGenerator.convertObjectToNumber(numResult.rows[0])
+  genResult.rules = []
+  for (let i = 0; i < ruleResult.rows.length; i++) {
+    genResult.rules.push(numGenerator.convertObjectToRule(ruleResult.rows[i]))
+  }
+
+  let valid = numGenerator.validateNumberSolution(genResult.rules, guess)
+  let points = 100
+  if (valid) {
+    for (let j = 0; j < genResult.nums.length; j++) {
+      points -= (guess[j] - genResult.nums[j])
+    }
+
+    if (tokenResult.success) {
+      let selectLinkSQL = `SELECT * from user_number_puzzle_link where user_name = ? and end_time_epoch is null order by start_time_epoch desc limit 1`
+      let selectResult = await dbHelper.select(selectLinkSQL, [tokenResult.name], db)
+      if (!selectResult.err && selectResult.rows != null && selectResult.rows.length > 0 && selectResult.rows[0].end_time_epoch == null
+        && dateHelper.GetYYYYMMDD(new Date(selectResult.rows[0].start_time_epoch)) == dateHelper.GetYYYYMMDD(new Date())) {
+        let updateLinkSQL = `UPDATE user_number_puzzle_link set end_time_epoch = ?, points = ?, solution = ? where number_puzzle_id = ?`
+        let updateResult = await dbHelper.update(updateLinkSQL, [new Date().getTime(), points, guess.toString(), genResult.id], db)
+        if (updateResult.err) {
+          console.log(updateResult.err)
+        }
+      }
+    }
+  }
+  res.status(200).json({ success: 'puzzle verified', valid: valid, points: points })
 })
 
 app.listen(process.env.PORT, (err) => {
-  if(err) {
+  if (err) {
     console.log(`error in server setup: ${err}`)
   }
-  console.log("Server listening on Port",process.env.PORT ? process.env.PORT : port)
+  console.log("Server listening on Port", process.env.PORT ? process.env.PORT : port)
 });
