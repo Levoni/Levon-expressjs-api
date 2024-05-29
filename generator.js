@@ -71,13 +71,13 @@ class GlobalRule extends Rule {
     }
     GetRuleString() {
         if (this.category == 'odd' || this.category == 'even') {
-            return `The sum of the digits must be ${this.category}`
+            return `The sum of the numbers must be ${this.category}`
         } else if (this.category == 'sum') {
-            return `The sum of the digits must be ${this.constant}`
+            return `The sum of the numbers must be ${this.constant}`
         } else if (this.category == 'greater than' || this.category == 'less than') {
-            return `The sum of the digits must be ${this.category} ${this.constant}`
+            return `The sum of the numbers must be ${this.category} ${this.constant}`
         } else if (this.category == 'ascending' || this.category == 'descending') {
-            return `The sum of the digits must be in ${this.category} order from left to right`
+            return `The sum of the numbers must be in ${this.category} order from left to right`
         }
 
     }
@@ -124,7 +124,7 @@ class Category extends DigitRule {
         this.category = category
     }
     GetRuleString() {
-        return `Digit ${this.digit + 1} must be ${this.category}.`
+        return `Number ${this.digit + 1} must be ${this.category}.`
     }
     VerifyRule(nums) {
         let num = nums[this.digit]
@@ -164,9 +164,9 @@ class ConstantCompare extends DigitRule {
     }
     GetRuleString() {
         if (this.operator == 'multiple' || this.operator == 'factor')
-            return `Digit ${this.digit + 1} is a ${this.operator} of ${this.constant}`
+            return `Number ${this.digit + 1} is a ${this.operator} of ${this.constant}`
         else
-            return `Digit ${this.digit + 1} is ${this.operator} ${this.constant}`
+            return `Number ${this.digit + 1} is ${this.operator} ${this.constant}`
     }
     VerifyRule(nums) {
         let num = nums[this.digit]
@@ -213,9 +213,9 @@ class DigitCompare extends DigitRule {
     }
     GetRuleString() {
         if (this.operator == 'Sqrt') {
-            return `Digit ${this.digit + 1} equals Sqrt(digit ${this.otherDigit + 1})`
+            return `Number ${this.digit + 1} equals Sqrt(number ${this.otherDigit + 1})`
         } else {
-            return `Digit ${this.digit + 1} equals (digit ${this.otherDigit + 1}) ${this.operator} ${this.constant} `
+            return `Number ${this.digit + 1} equals (number ${this.otherDigit + 1}) ${this.operator} ${this.constant} `
         }
     }
     VerifyRule(nums) {
@@ -467,7 +467,7 @@ class NumGenerator {
             newObject.initialize(obj.digit,obj.operator,obj.constant)
         } else if (obj.type == 'digitCompare') {
             newObject = new DigitCompare()
-            newObject.initialize(obj.digit,obj.operator,!obj.other_digit ? obj.otherDigit : obj.other_digit,obj.constant)
+            newObject.initialize(obj.digit,obj.operator,obj.other_digit == null ? obj.otherDigit : obj.other_digit,obj.constant)
         }
         return newObject
     }

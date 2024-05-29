@@ -1791,7 +1791,7 @@ app.get(HREF + '/getCurrentNumPuzzle', async (req, res) => {
           console.log(updateResult.err)
         }
       } else {
-        answered = true
+        answered = selectResult.rows[0].end_time_epoch != null
       }
     }
   }
