@@ -70,9 +70,12 @@ module.exports = {
         }
         return results.rows.length == 0 ? null : results.rows[0]
     },
+    
+    GetDriveRecords: async (driveId, parentId, limit, offset, orderByColumn , orderByDirection) => {
+        let selectSQL = `SELECT * from drive_record 
+        WHERE drive_id = ? and parent_record_id = ?
+        ${module.exports.GetFilterSQL(limit,offset,orderByColumn,orderByDirection)}`
 
-    GetDriveRecords: async (driveId, parentId) => {
-        let selectSQL = `SELECT * from drive_record where drive_id = ? and parent_record_id = ?`
         let results = await dbHelper.select(selectSQL,[driveId,parentId])
         if (results.err) {
             logger.logError(`error getting drive records info: ${results.err}`, [`Drive: ${driveId}`, `parentId: ${parentId}`])
@@ -90,7 +93,15 @@ module.exports = {
         }
         return results.rows
     },
-
+    GetDriveRecordsWithName: async (driveId, nameSearch) => {
+        let selectSQL = `SELECT * from drive_record where type != 0 and drive_id = ? and name LIKE ?`
+        let results = await dbHelper.select(selectSQL,[driveId,`%${nameSearch}%`])
+        if (results.err) {
+            logger.logError(`error getting drive records info: ${results.err}`, [`Drive: ${driveId}`])
+            return {error:`error getting drive records info`}
+        }
+        return results.rows
+    },
     AddDrive: async (driveName,path,creatorUserName) => {
         let SQL = `INSERT INTO drive (name,path,creator_name) 
         VALUES (?,?,?) 
@@ -118,11 +129,12 @@ module.exports = {
     AddDriveRecord: async (fileName, driveId, parentId, type, data, userName) => {
         let filePath = ''
         if(parentId != 0) {
-            let getParentInfo = this.GetDriveRecordById(parentId)
+            let getParentInfo = await module.exports.GetDriveRecordById(parentId)
             if(getParentInfo.error) {
                 return {error: getParentInfo.error}
             }
-            filePath = getParentInfo.path
+            filePath = getParentInfo.path + '/' + getParentInfo.name
+            filePath = filePath.startsWith('/') ? filePath.slice(1) : filePath
         }
 
         let fileBufferSize = !data ? 0 : Buffer.from(data).length
@@ -185,5 +197,18 @@ module.exports = {
             return {error:`error deleting drive record`}
         }
         return results.rows
+    },
+    DeleteDrivePath: async (driveId, path) => {
+                let SQL = `DELETE FROM drive_record where drive_id = ? and path like ?`
+        let results = await dbHelper.delete(SQL,[driveId,`${path}%`])
+        if (results.err) {
+            logger.logError(`error deleting drive path: ${results.err}`,[`DriveId: ${driveId}`,`Path: ${path}`])
+            return {error:`error deleting drive record`}
+        }
+        return results.rows
+    },
+    GetFilterSQL: (limit = 20, offset = 0, orderByColumn, orderByDirection) => {
+        return `${!orderByColumn ? '' : `ORDER BY ${orderByColumn} ${orderByDirection}`}
+        LIMIT ${limit} OFFSET ${offset}`
     }
 }

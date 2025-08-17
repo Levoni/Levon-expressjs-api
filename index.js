@@ -876,7 +876,7 @@ app.post(HREF + '/list/add', async (req, res) => {
     return
   }
 
-  res.status(200).json({ 'success': 'List created', 'id': results.rows.id })
+  res.status(200).json({ 'success': 'List created', id: results.rows.id })
   return
 })
 
@@ -1465,12 +1465,12 @@ app.post(HREF + '/directory/create', async (req, res) => {
     return
   }
   let { driveId, parentId, name } = req.body
-  if (!driveId || !parentId || !name) {
+  if (!driveId || parentId == null || !name) {
     res.status(400).json({ "error": "Required info missing" })
     return
   }
 
-  let drive = await DriveProvider.GetDriveById(driveid);
+  let drive = await DriveProvider.GetDriveById(driveId);
   if(!drive || drive.error) {
     res.status(500).json({ "error": `Failed to create directory`})
     return
@@ -1482,15 +1482,50 @@ app.post(HREF + '/directory/create', async (req, res) => {
     return
   }
 
-  var result = fileHelper.CreateDirectory(tokenResult.name,directoryResult.path,drive.path)
+  var result = await fileHelper.CreateDirectory(directoryResult.name,directoryResult.path,drive.path)
   if (!result) {
     res.status(500).json({ error: 'Failed to create directory' })
     return
   }
-  res.status(200).json({ success: 'created directory' })
+  res.status(200).json({ success: 'created directory', id: directoryResult.id })
 })
 
-app.get(HREF + '/FileList', async (req, res) => {
+app.get(HREF + '/File/search', async (req,res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
+    res.status(500).json({ "error": tokenResult.error })
+    return
+  }
+  let { driveId, searchText, size, page, withPreview} = req.query
+  if (!driveId || !searchText) {
+    res.status(400).json({ "error": "Required info missing" })
+    return
+  }
+
+  let sizeNum = !size ? 20 : parseInt(size)
+  let pageNum = !page ? 0 : parseInt(page)
+  let isPreview = withPreview == 'true' ? true : false
+
+  let driveInfo = await DriveProvider.GetDriveById(driveId)
+  if(!driveInfo || driveInfo.error) {
+    res.status(500).json({ error: `Couldn't get file` })
+    return
+  }
+
+  let driveRecordInfos = await DriveProvider.GetDriveRecordsWithName(driveId,searchText)
+  if(!driveRecordInfos || driveRecordInfos.error) {
+    res.status(500).json({ error: `Couldn't get file` })
+    return
+  }
+
+  let start = pageNum * sizeNum
+  let filteredSelection = driveRecordInfos.slice(start,start + sizeNum)
+
+  let files = await fileHelper.GetFilesUsingRecords(filteredSelection, driveInfo, isPreview)
+  res.status(200).json(files);
+})
+
+app.get(HREF + '/FileList', async (req, res) => { // Depreciated
   let { drive, size, page, withPreview } = req.query
   if (!drive) {
     res.status(400).json({ "error": "Required info missing" })
@@ -1505,7 +1540,7 @@ app.get(HREF + '/FileList', async (req, res) => {
 })
 
 app.get(HREF + '/Files', async (req, res) => {
-  let { driveId, parentId, size, page, withPreview } = req.query
+  let { driveId, parentId, size, page, withPreview, sortBy, sortDirection } = req.query
   if (!driveId || !parentId) {
     res.status(400).json({ "error": "Required info missing" })
     return
@@ -1513,38 +1548,40 @@ app.get(HREF + '/Files', async (req, res) => {
   let sizeNum = !size ? 20 : parseInt(size)
   let pageNum = !page ? 0 : parseInt(page)
   let isPreview = withPreview == 'false' ? false : true
+  let sortColumn = !sortBy ? 'name' : sortBy
+  let sortColumnDirection = !sortDirection ? 'asc' : sortDirection
 
-  let fileInfos = await DriveProvider.GetDriveRecords(driveId,parentId)
+  let start = pageNum * sizeNum
+
+  let fileInfos = await DriveProvider.GetDriveRecords(driveId,parentId, sizeNum, start, sortColumn, sortColumnDirection)
   if(fileInfos.error) {
-    res.status(500).json({ error: 'Failed to delete file' })
+    res.status(500).json({ error: 'Failed to get file info' })
     return
   }
-  let start = pageNum * sizeNum
-  let filteredSelection = fileInfos.slice(start,start + size)
 
   let driveInfo = await DriveProvider.GetDriveById(driveId)
   if(!driveInfo || driveInfo.error) {
-    res.status(500).json({ error: 'Failed to delete file' })
+    res.status(500).json({ error: 'Failed to get drive' })
     return
   }
 
-  let files = await fileHelper.GetFilesUsingRecords(filteredSelection, driveInfo, isPreview)
+  let files = await fileHelper.GetFilesUsingRecords(fileInfos, driveInfo, isPreview)
   res.status(200).json(files);
 })
 
-app.get(HREF + '/File', async (req, res) => {
+app.get(HREF + '/File', async (req, res) => {  // Depreciated
   let { drive, name } = req.query
   if (!drive || !name) {
     res.status(400).json({ "error": "Required info missing" })
     return
   }
 
-  var file = await fileHelper.GetFile(name, drive, '');
+  var file = await fileHelper.GetFileBuffer(name, drive, '');
   res.status(200).json({ data: file })
 })
 
 app.get(HREF + '/FileInfo', async (req, res) => {
-  let { driveId, parentId, name } = req.query
+  let { driveId, parentId, name, withPreview } = req.query
   if (!driveId || parentId == null || ! name) {
     res.status(400).json({ "error": "Required info missing" })
     return
@@ -1562,8 +1599,9 @@ app.get(HREF + '/FileInfo', async (req, res) => {
     return
   }
 
-  var file = await fileHelper.GetFile(driveRecordInfo.name, driveInfo.path, driveRecordInfo.path);
-  res.status(200).json({ data: file })
+  var fileData = await fileHelper.GetFileBuffer(driveRecordInfo.name, driveInfo.path, driveRecordInfo.path);
+  var file = fileHelper.CreateFileObject(driveRecordInfo.name, fileData, withPreview ? await fileHelper.CreatePreviewFromBuffer(fileData, driveRecordInfo.name) : null,driveRecordInfo.id, driveRecordInfo)
+  res.status(200).json(file)
 })
 
 app.post(HREF + '/PostFile', async (req, res) => {
@@ -1582,6 +1620,7 @@ app.post(HREF + '/PostFile', async (req, res) => {
   let driveRecord = await DriveProvider.GetDriveRecord(driveId,parentId,name)
   if(driveRecord) {
     res.status(500).json({ "error": "Already Exists" })
+    return
   }
 
   let createFileResult =  await DriveProvider.AddDriveRecord(name, driveId,parentId,fileType,data,tokenResult.name)
@@ -1601,7 +1640,7 @@ app.post(HREF + '/PostFile', async (req, res) => {
     res.status(500).json({ "error": "Error creating the file" })
     return
   }
-  res.status(200).json({ success: 'File Uploaded' })
+  res.status(200).json({ success: 'File Uploaded', id: createFileResult.id})
 })
 
 app.post(HREF + '/DeleteFile', async (req, res) => {
@@ -1618,21 +1657,39 @@ app.post(HREF + '/DeleteFile', async (req, res) => {
   let recordInfo = await DriveProvider.GetDriveRecordById(driveRecordId)
   if(!recordInfo || recordInfo.error) {
     res.status(500).json({ error: 'Failed to delete file' })
+    return
   }
 
   let driveInfo = await DriveProvider.GetDriveById(recordInfo.drive_id)
   if(!driveInfo || driveInfo.error) {
     res.status(500).json({ error: 'Failed to delete file' })
+    return
   }
+
 
   let deleteDriveRecord = await DriveProvider.DeleteDriveRecord(driveRecordId)
-  if(deleteDriveRecord.error) {
+  if(deleteDriveRecord && deleteDriveRecord.error) {
     res.status(500).json({ error: 'Failed to delete file' })
+    return
   }
 
-  var result = await fileHelper.DeleteFile(recordInfo.name, driveInfo.path, recordInfo.path)
+  if (recordInfo.type === 0) {
+    let deleteDrivePath = await DriveProvider.DeleteDrivePath(driveInfo.id, fileHelper.ConstructFilePath(recordInfo.name,recordInfo.path))
+    if(deleteDrivePath && deleteDrivePath.error) {
+      res.status(500).json({ error: 'failed to delete file'})
+    }
+  }
+
+  var result
+  if(recordInfo.type == 0) {
+    result = await fileHelper.DeleteDirectory(recordInfo.name, driveInfo.path, recordInfo.path)
+  } else {
+    result = await fileHelper.DeleteFile(recordInfo.name, driveInfo.path, recordInfo.path)
+  }
+  
   if(!result) {
     res.status(500).json({ error: 'Failed to delete file' })
+    return
   }
   res.status(200).json({ success: result })
 })
