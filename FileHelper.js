@@ -31,7 +31,7 @@ module.exports = {
         return null
     },
     GetFiles: async (drive, size, start, withPreview) => {
-        var files = fs.readdir(drive)
+        var files = await fs.readdir(drive)
         files = files.slice(start, start + size)
         var fileObjects = await Promise.all(files.map(async (x, i) => {
             let preview = null

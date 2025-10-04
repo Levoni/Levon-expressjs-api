@@ -1797,7 +1797,7 @@ app.post(HREF + '/Drive/create', async (req, res) => {
   if (!tokenResult.success) {
     return
   }
-  //TODO: Make sure driveName has no special characters like '/'
+  //TODO: Make sure driveName has no special characters like '/' and share is a protected name
   let { driveName, path } = req.body
   if (!driveName) {
     res.status(400).json({ "error": "Required info missing" })
