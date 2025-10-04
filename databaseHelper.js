@@ -1,7 +1,8 @@
 module.exports = {
-    select: (sql, params, db) => {
+    database: null,
+    select: (sql, params) => {
         return new Promise((resolve, reject) => {
-            db.all(sql, params,(err, rows)=> {
+            module.exports.database.all(sql, params,(err, rows)=> {
                 if(err) {
                     console.log('sql error:')
                     console.log(err)
@@ -11,9 +12,9 @@ module.exports = {
         })
     },
 
-    update: (sql, params, db) => {
+    update: (sql, params) => {
         return new Promise((resolve, reject) => {
-            db.run(sql, params,(err, rows)=> {
+            module.exports.database.run(sql, params,(err, rows)=> {
                 if(err) {
                     console.log('sql error:')
                     console.log(err)
@@ -23,9 +24,9 @@ module.exports = {
         })
     },
 
-    delete: (sql, params, db) => {
+    delete: (sql, params) => {
         return new Promise((resolve, reject) => {
-            db.run(sql, params,(err, rows)=> {
+            module.exports.database.run(sql, params,(err, rows)=> {
                 if(err) {
                     console.log('sql error:')
                     console.log(err)
@@ -35,9 +36,9 @@ module.exports = {
         })
     },
 
-    insert: (sql, params, db) => {
+    insert: (sql, params) => {
         return new Promise((resolve, reject) => {
-            db.run(sql, params,(err, rows)=> {
+            module.exports.database.run(sql, params,(err, rows)=> {
                 if(err) {
                     console.log('sql error:')
                     console.log(err)
@@ -47,9 +48,9 @@ module.exports = {
         })
     },
 
-    insertAndGet: (sql, params, db) => {
+    insertAndGet: (sql, params) => {
         return new Promise((resolve, reject) => {
-            db.get(sql, params,(err, rows)=> {
+            module.exports.database.get(sql, params,(err, rows)=> {
                 if(err) {
                     console.log('sql error:')
                     console.log(err)
@@ -59,9 +60,9 @@ module.exports = {
         })
     },
 
-    selectUser: (userName, db) => {
+    selectUser: (userName) => {
         return new Promise((resolve, reject) => {
-            db.all('SELECT * from user where name = ? LIMIT 1' , userName, (err, rows) => {
+            module.exports.database.all('SELECT * from user where name = ? LIMIT 1' , userName, (err, rows) => {
                 if(err) {
                     console.log(err)
                 }
@@ -70,9 +71,9 @@ module.exports = {
         })
     },
 
-    selectCurrentNumber: ( db) => {
+    selectCurrentNumber: () => {
         return new Promise((resolve, reject) => {
-            db.all('SELECT * from Numbers order by id DESC LIMIT 1' , [], (err, rows) => {
+            module.exports.database.all('SELECT * from Numbers order by id DESC LIMIT 1' , [], (err, rows) => {
                 if(err) {
                     console.log(err)
                 }
