@@ -73,6 +73,15 @@ app.get(HREF + '/', (req, res) => {
   res.send('Hello World!')
 })
 
+// Add this health check endpoint
+app.get(HREF + '/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  })
+})
+
 app.post(HREF + '/auth/accessToken', (req, res) => {
   let { code } = req.body
   if (!code) {
@@ -1668,14 +1677,14 @@ app.post(HREF + '/DeleteFile', async (req, res) => {
 
 
   let deleteDriveRecord = await DriveProvider.DeleteDriveRecord(driveRecordId)
-  if(deleteDriveRecord && deleteDriveRecord.error) {
+  if(deleteDriveRecord.error) {
     res.status(500).json({ error: 'Failed to delete file' })
     return
   }
 
   if (recordInfo.type === 0) {
     let deleteDrivePath = await DriveProvider.DeleteDrivePath(driveInfo.id, fileHelper.ConstructFilePath(recordInfo.name,recordInfo.path))
-    if(deleteDrivePath && deleteDrivePath.error) {
+    if(deleteDrivePath.error) {
       res.status(500).json({ error: 'failed to delete file'})
     }
   }
@@ -1857,7 +1866,7 @@ app.post(HREF + '/Drive/delete', async (req, res) => {
     return
   }
 
-  let deleteDirectoryResult = await fileHelper.DeleteDirectory(getDriveResults[0].path)
+  let deleteDirectoryResult = await fileHelper.DeleteDirectory(getDriveResults.path)
   if (!deleteDirectoryResult) {
     res.status(500).json({ error: 'Failed to delete files' })
     return
@@ -1974,8 +1983,9 @@ app.get(HREF + '/getCurrentNumPuzzle', async (req, res) => {
   let nextDate = dateHelper.AddDays(new Date(), 1)
 
   let selectNumSQL = `SELECT * FROM number_puzzle where created_on > ? and created_on < ?`
+  console.log(selectNumSQL, [dateHelper.GetYYYYMMDD(date), dateHelper.GetYYYYMMDD(nextDate)])
   let numResult = await dbHelper.select(selectNumSQL, [dateHelper.GetYYYYMMDD(date), dateHelper.GetYYYYMMDD(nextDate)], db)
-  if (numResult.err) {
+  if (numResult.err || numResult.rows.length == 0) {
     console.log(numResult.err)
     res.status(500).json({ error: `Couldn't get puzzle` })
     return
@@ -2079,4 +2089,6 @@ app.listen(process.env.PORT, (err) => {
     console.log(`error in server setup: ${err}`)
   }
   console.log("Server listening on Port", process.env.PORT ? process.env.PORT : port)
+  console.log("Virtual Host", HREF)
+  console.log("Environment:", process.env.NODE_ENV);
 });
