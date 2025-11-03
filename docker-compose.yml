@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  # Main Node.js application service
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: levon-expressjs-api
+    restart: unless-stopped
+    ports:
+      - "3752:3752"
+    environment:
+      - NODE_ENV=production
+      - PORT=3752
+      - salt=VerySecret
+      - appvirtdir=/iisnode
+      - gpassword=sfkh ltpm lteo fmuy
+    volumes:
+      # Persist SQLite database
+      - ./Node.sqlite3:/app/Node.sqlite3
+      # Persist user data directories
+      - ./share:/app/share
+      - ./SwensonShare:/app/SwensonShare
+      - ./users:/app/users
+      # Optional: Mount logs directory if your app creates logs
+      # - ./logs:/app/logs
+    networks:
+      - WebApp-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Optional: Add a reverse proxy (uncomment if needed)
+  # nginx:
+  #   image: nginx:alpine
+  #   container_name: levon-nginx
+  #   restart: unless-stopped
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/nginx.conf:ro
+  #     - ./ssl:/etc/nginx/ssl:ro
+  #   depends_on:
+  #     - app
+  #   networks:
+  #     - app-network
+
+networks:
+  WebApp-network:
+    external: true
+
+# Optional: Add named volumes for better data persistence
+# volumes:
+#   sqlite_data:
+#   user_data:

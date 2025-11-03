@@ -31,7 +31,7 @@ module.exports = {
                     console.log('sql error:')
                     console.log(err)
                 }
-                return resolve({err:err,rows:rows})
+                return resolve({err:err,rows:null})
             })
         })
     },

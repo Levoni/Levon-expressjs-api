@@ -166,7 +166,7 @@ module.exports = {
             logger.logError(`error deleting user from drive: ${results.err}`,[`userName: ${userName}`,`DriveId: ${driveId}`])
             return {error:`error deleting user from drive`}
         }
-        return results.rows
+        return {error: null}
     },
 
     DeleteDriveUsers: async (driveId) => {
@@ -176,7 +176,7 @@ module.exports = {
             logger.logError(`error deleting users from drive: ${results.err}`,[`DriveId: ${driveId}`])
             return {error:`error deleting users from drive`}
         }
-        return results.rows
+        return {error: null}
     },
 
     DeleteDrive: async (driveId) => {
@@ -186,7 +186,7 @@ module.exports = {
             logger.logError(`error deleting drive: ${results.err}`,[`DriveId: ${driveId}`])
             return {error:`error deleting drive`}
         }
-        return results.rows
+        return {error: null}
     },
 
     DeleteDriveRecord: async (recordId) => {
@@ -196,16 +196,16 @@ module.exports = {
             logger.logError(`error deleting drive record: ${results.err}`,[`RecordId: ${recordId}`])
             return {error:`error deleting drive record`}
         }
-        return results.rows
+        return {error: null}
     },
     DeleteDrivePath: async (driveId, path) => {
-                let SQL = `DELETE FROM drive_record where drive_id = ? and path like ?`
+        let SQL = `DELETE FROM drive_record where drive_id = ? and path like ?`
         let results = await dbHelper.delete(SQL,[driveId,`${path}%`])
         if (results.err) {
             logger.logError(`error deleting drive path: ${results.err}`,[`DriveId: ${driveId}`,`Path: ${path}`])
             return {error:`error deleting drive record`}
         }
-        return results.rows
+        return {error: null}
     },
     GetFilterSQL: (limit = 20, offset = 0, orderByColumn, orderByDirection) => {
         return `${!orderByColumn ? '' : `ORDER BY ${orderByColumn} ${orderByDirection}`}
