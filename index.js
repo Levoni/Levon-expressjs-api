@@ -444,10 +444,42 @@ app.post(HREF + '/login', async (req, res) => {
     res.status(400).json({ "error": "User does not exist with specified username and password" })
     return
   } else {
-    let token = jwt.sign({ name: selectResult.rows[0].name }, secret, { expiresIn: "5h" })
-    res.status(200).json({ "token": token })
+    let token = jwt.sign({name: selectResult.rows[0].name}, secret, {expiresIn: "24h"})
+    res.status(200).json({"token":token})
     return
   }
+})
+
+app.post(HREF + '/login/admin', async (req, res) => {
+  let { name, password, tokentime } = req.body
+  if (!name || !password) {
+    res.status(400).json({ "error": "Login information not supplied in body" })
+    return
+  }
+
+  let loweredName = name.toLowerCase()
+  var encodedpassword = md5(password)
+  let selectResult = await dbHelper.select('SELECT * from user where name = ? and secret = ? LIMIT 1', [loweredName, encodedpassword], db)
+  if (!selectResult.rows || selectResult.rows.length == 0) {
+    res.status(400).json({ "error": "User does not exist with specified username and password" })
+    return
+  } else {
+    if (!selectResult.rows[0].is_admin) {
+      res.status(403).json({ "error": "User does not exist with specified username and password" })
+      return
+    }
+    let token = tokentime ? jwt.sign({name: selectResult.rows[0].name}, secret, {expiresIn: tokentime}) : jwt.sign({name: selectResult.rows[0].name}, secret)
+    res.status(200).json({"token":token})
+    return
+  }
+})
+
+app.get(HREF + '/login/verify', async (req, res) => {
+  let tokenResult = CheckForTokenAndRespond(req, res);
+  if (!tokenResult.success) {
+    return
+  }
+  res.status(200).json({ "success": true })
 })
 
 app.get(HREF + '/game', async (req, res) => {
